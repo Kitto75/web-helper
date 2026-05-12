@@ -26,3 +26,22 @@ class XUIClient:
         if not isinstance(resp, dict):
             return False
         return bool(resp.get('success') is True)
+
+    def get_inbound(self, inbound_id:int):
+        data = self.call('GET', f'/inbounds/get/{inbound_id}')
+        return data.get('obj') if isinstance(data, dict) else None
+
+    def get_client_sub_id(self, inbound_id:int, email:str):
+        inbound = self.get_inbound(inbound_id)
+        settings_raw = (inbound or {}).get('settings')
+        if not settings_raw:
+            return None
+        try:
+            settings = json.loads(settings_raw) if isinstance(settings_raw, str) else settings_raw
+            clients = (settings or {}).get('clients') or []
+            for c in clients:
+                if c.get('email') == email:
+                    return c.get('subId')
+        except Exception:
+            return None
+        return None
