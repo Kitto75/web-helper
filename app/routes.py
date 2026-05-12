@@ -4,7 +4,6 @@ import json
 import os
 from datetime import datetime, timedelta
 
-import pytz
 import qrcode
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -62,13 +61,19 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
     admin = current_admin(request, dbs)
     if not admin:
         return RedirectResponse('/login')
-    tz = pytz.timezone('Asia/Tehran')
     users = dbs.scalars(select(UserAccount).where(UserAccount.admin_id == admin.id if not admin.is_super else True)).all()
     logs = dbs.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(100)).all() if admin.is_super else dbs.scalars(select(AuditLog).where(AuditLog.actor == admin.username).order_by(AuditLog.id.desc()).limit(100)).all()
+    for entry in logs:
+        short = (entry.detail or '').strip()
+        if short.startswith('{') and short.endswith('}'):
+            short = 'JSON log (hidden details)'
+        if len(short) > 120:
+            short = short[:117] + '...'
+        entry.detail_short = short
     admins = dbs.scalars(select(Admin)).all() if admin.is_super else []
     reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == False)).all() if admin.is_super else []
     panel_cfg = get_panel_config(dbs)
-    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'now': datetime.now(tz), 'msg': msg, 'panel_cfg': panel_cfg})
+    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'msg': msg, 'panel_cfg': panel_cfg})
 
 
 @router.get('/login', response_class=HTMLResponse)

@@ -1,33 +1,96 @@
 <!doctype html>
-<html><head><meta charset="utf-8"/><title>3x-ui Delegated Admin</title>
-<style>
-body{font-family:Inter,Arial,sans-serif;background:#f1f5f9;margin:0;padding:20px;color:#0f172a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 18px #94a3b833}input,button{padding:8px;border-radius:8px;border:1px solid #cbd5e1;margin:4px 0}button{background:#0ea5e9;color:#fff;border:none}h4{margin:6px 0 10px}
-.badge{display:inline-block;background:#e2e8f0;padding:4px 8px;border-radius:999px;font-size:12px}.msg{background:#dcfce7;padding:8px;border-radius:8px;margin:10px 0}
-</style></head><body>
-<h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %}</h2>
-<div>{{now}}</div>{% if msg %}<div class="msg">{{msg}}</div>{% endif %}
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>3x-ui Delegated Admin</title>
+  <style>
+    :root{
+      --bg:#f1f5f9;--card:#ffffff;--text:#0f172a;--muted:#475569;--line:#cbd5e1;--accent:#0ea5e9;--badge:#e2e8f0;
+    }
+    body.dark{--bg:#0f172a;--card:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--accent:#38bdf8;--badge:#334155;}
+    body{font-family:Inter,Arial,sans-serif;background:var(--bg);margin:0;padding:20px;color:var(--text)}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 4px 18px #0001}
+    input,button,summary{padding:8px;border-radius:8px;border:1px solid var(--line);margin:4px 0;background:transparent;color:var(--text)}
+    button{background:var(--accent);color:#fff;border:none;cursor:pointer}
+    h4{margin:6px 0 10px}
+    .badge{display:inline-block;background:var(--badge);padding:4px 8px;border-radius:999px;font-size:12px}
+    .msg{background:#22c55e22;padding:8px;border-radius:8px;margin:10px 0}
+    .hint{font-size:12px;color:var(--muted);margin-top:-2px;margin-bottom:6px}
+    details{margin:6px 0}
+    .mono{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %}</h2>
+  <button type="button" onclick="toggleTheme()" title="Switch dark/light mode">🌗 Dark Mode</button>
+</div>
+{% if msg %}<div class="msg">{{msg}}</div>{% endif %}
 <div class="grid">
-<div class="card"><h4>Create User</h4>
-<form method='post' action='/users/create'><input name='username' placeholder='lowercase+num only' required/><input name='inbound_id' type='number' value='1' required/><input name='traffic_gb' type='number' step='0.1' required/><input name='expiry_days' type='number' value='30'/><button>Create</button></form></div>
-{% if admin.is_super %}
-<div class="card"><h4>3x-ui Panel Settings</h4>
-<form method='post' action='/panel/config'>
-<input name='panel_url' placeholder='http://127.0.0.1:2053' value='{{panel_cfg.url if panel_cfg else ""}}' required/>
-<input name='panel_path' placeholder='/xui' value='{{panel_cfg.path if panel_cfg else ""}}'/>
-<input name='panel_username' placeholder='panel username' value='{{panel_cfg.username if panel_cfg else ""}}' required/>
-<input name='panel_password' type='password' placeholder='panel password' required/>
-<button>Save Panel Settings</button></form></div>
-<div class="card"><h4>Create Admin</h4><form method='post' action='/admins/create'><input name='username' required><input name='password' type='password' required><input name='credit' type='number'><button>Create Admin</button></form>
-<form method='post' action='/admins/set_price_all'><input name='price' type='number' required><button>Set Price All</button></form>
-<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='true' hidden><button>Enable Admin Actions</button></form>
-<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='false' hidden><button>Disable Admin Actions</button></form></div>
-{% else %}
-<div class="card"><h4>Request Balance Increase</h4><form method='post' action='/balance/request' enctype='multipart/form-data'><input name='amount' type='number' required><input name='message'><input type='file' name='screenshot'><button>Send</button></form></div>
-{% endif %}
-<div class="card"><h4>Users</h4>{% for u in users %}<div>{{u.username}} {{u.traffic_gb}}GB {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}</div>
-<div class="card"><h4>Logs</h4>{% for l in logs %}<div>{{l.created_at}} [{{l.category}}] {{l.actor}} - {{l.detail}}</div>{% endfor %}</div>
-{% if admin.is_super %}
-<div class="card"><h4>Admins</h4>{% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman}} | price {{x.price_per_gb}} | active {{x.active}}</div>{% endfor %}</div>
-<div class="card"><h4>Balance Requests</h4>{% for r in reqs %}<form method='post' action='/balance/approve'><span>#{{r.id}} amount {{r.amount}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}</div>
-{% endif %}
-</div></body></html>
+  <div class="card"><h4>Create User</h4>
+    <form method='post' action='/users/create'>
+      <input name='username' placeholder='Username (lowercase + numbers)' title='New client username. Use lowercase letters and numbers only.' required/>
+      <div class='hint'>Who this account belongs to.</div>
+      <input name='inbound_id' type='number' value='1' title='3x-ui inbound ID where this user should be created.' required/>
+      <div class='hint'>Which inbound to add this user to.</div>
+      <input name='traffic_gb' type='number' step='1' title='Traffic limit in GB.' required/>
+      <div class='hint'>Total traffic allocation in GB.</div>
+      <input name='expiry_days' type='number' value='30' title='Number of days before this user expires.'/>
+      <div class='hint'>Maximum 30 days.</div>
+      <button>Create</button>
+    </form>
+  </div>
+
+  {% if admin.is_super %}
+  <div class="card"><h4>3x-ui Panel Settings</h4>
+    <form method='post' action='/panel/config'>
+      <input name='panel_url' placeholder='Panel URL (e.g. http://127.0.0.1:2053)' value='{{panel_cfg.url if panel_cfg else ""}}' title='Base URL of your 3x-ui panel.' required/>
+      <input name='panel_path' placeholder='Panel Path (optional, e.g. /xui)' value='{{panel_cfg.path if panel_cfg else ""}}' title='Optional web path for panel. Leave empty if root.'/>
+      <input name='panel_username' placeholder='Panel username' value='{{panel_cfg.username if panel_cfg else ""}}' title='Username for 3x-ui login.' required/>
+      <input name='panel_password' type='password' placeholder='Panel password' title='Password for 3x-ui login.' required/>
+      <button>Save Panel Settings</button>
+    </form>
+  </div>
+
+  <div class="card"><h4>Create Admin</h4>
+    <form method='post' action='/admins/create'>
+      <input name='username' placeholder='Admin username' title='New delegated admin username.' required>
+      <input name='password' type='password' placeholder='Admin password' title='Password for delegated admin.' required>
+      <input name='credit' type='number' step='1' placeholder='Initial credit' title='Starting credit for the admin (no decimals).'>
+      <button>Create Admin</button>
+    </form>
+    <form method='post' action='/admins/set_price_all'>
+      <input name='price' type='number' step='1' placeholder='Price per GB' title='Set one global price for all admins (integer).' required>
+      <button>Set Price All</button>
+    </form>
+  </div>
+  {% else %}
+  <div class="card"><h4>Request Balance Increase</h4>
+    <form method='post' action='/balance/request' enctype='multipart/form-data'>
+      <input name='amount' type='number' step='1' placeholder='Requested amount' title='How much credit you need.' required>
+      <input name='message' placeholder='Short note (optional)' title='Optional description for your request.'>
+      <input type='file' name='screenshot' title='Optional payment proof screenshot.'>
+      <button>Send</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card"><h4>Users</h4>{% for u in users %}<div>{{u.username}} | {{u.traffic_gb|int}}GB | {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}</div>
+
+  {% if admin.is_super %}
+  <div class="card"><h4>Admins</h4>
+    {% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman|int}} | price {{x.price_per_gb|int}} | active {{x.active}}</div>{% endfor %}
+    <details><summary>Logs</summary><div class='mono'>{% for l in logs %}{{l.created_at.strftime('%H:%M:%S')}} [{{l.category}}] {{l.actor}} - {{l.detail_short}}\n{% endfor %}</div></details>
+    <details><summary>Balance Requests</summary>{% for r in reqs %}<form method='post' action='/balance/approve'><span>#{{r.id}} amount {{r.amount|int}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}</details>
+  </div>
+  {% else %}
+  <div class="card"><details><summary>Logs</summary><div class='mono'>{% for l in logs %}{{l.created_at.strftime('%H:%M:%S')}} [{{l.category}}] {{l.detail_short}}\n{% endfor %}</div></details></div>
+  {% endif %}
+</div>
+<script>
+(function(){ const t=localStorage.getItem('theme'); if(t==='dark') document.body.classList.add('dark'); })();
+function toggleTheme(){ document.body.classList.toggle('dark'); localStorage.setItem('theme', document.body.classList.contains('dark')?'dark':'light'); }
+</script>
+</body></html>
