@@ -90,9 +90,6 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
                 inbounds.append({"id": ib.get("id"), "name": ib.get("remark") or ib.get("tag") or f"Inbound {ib.get('id')}"})
         except Exception:
             inbounds = []
-    inbound_map = {i["id"]: i["name"] for i in inbounds}
-    for u in users:
-        u.inbound_name = inbound_map.get(u.inbound_id)
     allowed = parse_allowed_inbounds(admin.allowed_inbounds)
     usable_inbounds = [i for i in inbounds if (admin.is_super or not allowed or i["id"] in allowed)]
     return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'msg': msg, 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed})
@@ -182,8 +179,9 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
         return RedirectResponse(f'/?msg=3x-ui+rejected+request:+{reason}', 303)
 
     a.credit_toman -= cost
-    sub = f"{cfg['url'].rstrip('/')}/sub/{username}"
     panel_base = cfg['url'].rstrip('/') + cfg.get('path', '')
+    sub_id = client.get_client_sub_id(inbound_id=inbound_id, email=username)
+    sub = f"{panel_base}/sub/{sub_id}" if sub_id else f"{panel_base}/sub/{username}"
     user_cfg = f'{panel_base}/panel/inbounds'
     dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg))
     log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d inbound_id={inbound_id}')
@@ -246,3 +244,15 @@ def qr(kind:str,user_id:int,request:Request,dbs=Depends(db)):
     link=u.subscription_link if kind=='sub' else u.config_link
     img=qrcode.make(link); b=io.BytesIO(); img.save(b,format='PNG')
     return HTMLResponse(f"<img src='data:image/png;base64,{base64.b64encode(b.getvalue()).decode()}'/><p>{link}</p>")
+
+
+@router.post('/balance/reject')
+def reject(request:Request, req_id:int=Form(...), dbs=Depends(db)):
+    a=current_admin(request,dbs)
+    if not a or not a.is_super: return RedirectResponse('/',303)
+    r=dbs.get(BalanceRequest,req_id)
+    if r and not r.approved:
+        dbs.delete(r)
+        log(dbs,a.username,'balance',f'reject request_id={req_id}')
+        dbs.commit()
+    return RedirectResponse('/',303)
