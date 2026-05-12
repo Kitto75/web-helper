@@ -28,6 +28,36 @@ Then create initial superadmin:
 curl -X POST -F 'username=superadmin' -F 'password=StrongPass123!' http://127.0.0.1:38291/bootstrap
 ```
 
+## Change superadmin username/password later
+After the app is already running and initialized, you can update superadmin credentials directly in the SQLite DB:
+
+```bash
+python - <<'PY'
+from sqlalchemy import select
+from app.db import SessionLocal
+from app.models import Admin
+from app.security import hash_password
+
+NEW_USERNAME = "superadmin2"
+NEW_PASSWORD = "NewStrongPass123!"
+
+s = SessionLocal()
+try:
+    admin = s.scalar(select(Admin).where(Admin.is_super == True))
+    if not admin:
+        raise SystemExit("No superadmin found")
+
+    admin.username = NEW_USERNAME
+    admin.password_hash = hash_password(NEW_PASSWORD)
+    s.commit()
+    print("Superadmin credentials updated.")
+finally:
+    s.close()
+PY
+```
+
+Then log in using the new credentials.
+
 ## SSL + custom path + custom port (no nginx)
 Use a reverse-compatible base path by mounting app behind your own path via `--root-path`:
 ```bash
