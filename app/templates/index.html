@@ -19,6 +19,7 @@
     .hint{color:var(--muted);font-size:12px;margin:4px 0 8px}
     .badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px}
     .msg{background:#22c55e22;border:1px solid #22c55e55;padding:10px;border-radius:10px;margin:10px 0}
+    .msg.error{background:#ef444422;border:1px solid #ef4444aa}
     .checkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
     .checkitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px}
     .checkitem input{width:auto;margin:0}
@@ -34,15 +35,28 @@
     .qr-box{border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
     .qr-box img{max-width:240px;border-radius:12px;cursor:pointer;transition:transform .15s ease}.qr-box img:hover{transform:scale(1.02)}
     .small{font-size:12px;color:var(--muted)}
-    @keyframes fade{from{opacity:0}to{opacity:1}} @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}} .theme-btn{position:relative;overflow:hidden}.error-pop{background:#ef444422;border-color:#ef4444aa;animation:shake .4s ease}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+    @keyframes fade{from{opacity:0}to{opacity:1}} @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}} .theme-btn{position:relative;overflow:hidden}.error-pop{animation:shake .4s ease}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+    .gear-wrap{position:relative}.gear-menu{position:absolute;right:0;top:44px;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:none;z-index:20}
+    .gear-menu.show{display:block}
   </style>
 </head>
 <body>
 <div class="topbar">
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %} <span class="badge">Balance: {{'{:,.0f}'.format(admin.credit_toman)}}</span></h2>
-  <div class="actions" style="min-width:260px"><button type="button" id="themeBtn" class="btn-muted theme-btn" onclick="toggleTheme(this)">🪄 Theme Shift</button><form method="post" action="/logout"><button>Logout</button></form></div>
+  <div class="actions" style="min-width:260px">
+    <button type="button" id="themeBtn" class="btn-muted theme-btn" onclick="toggleTheme(this)">🪄 Theme Shift</button>
+    {% if admin.is_super %}
+    <div class="gear-wrap">
+      <button type="button" class="btn-muted" onclick="toggleGearMenu()">⚙️</button>
+      <div id="gearMenu" class="gear-menu">
+        <form method="post" action="/system/restart"><button class="btn-danger">Restart Panel + Service</button></form>
+      </div>
+    </div>
+    {% endif %}
+    <form method="post" action="/logout"><button>Logout</button></form>
+  </div>
 </div>
-{% if msg %}<div class="msg error-pop">{{msg}}</div>{% endif %}
+{% if msg %}<div class="msg {% if msg_type == 'error' %}error error-pop{% endif %}">{{msg}}</div>{% endif %}
 <div class="grid">
   <div class="card"><h4>Create User</h4><form method='post' action='/users/create'>
     <input name='username' placeholder='Username' required/>
@@ -62,7 +76,7 @@
     <div class='row2'><input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'></div><input type='file' name='screenshot'><button>Send Request</button></form><button class='btn-muted' style='margin-top:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button></div>
   {% endif %}
 
-  <div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.created_at.strftime('%Y-%m-%d %H:%M:%S'))|tojson}})'>{{u.username}}</span></td><td>{{'active' if u.enabled else 'disabled'}}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td></tr>{% endfor %}</table></div>
+  <div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}})'>{{u.username}}</span></td><td>{{'active' if u.enabled else 'disabled'}}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table></div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Admins</h4>{% for x in admins %}<form method="post" action="/admins/update" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px">
@@ -74,7 +88,7 @@
   </form>{% endfor %}
   <form method='post' action='/admins/set_price_all'><div class="row2"><input name='price' type='number' step='1' placeholder='Global price / GB' required><button>Set Price for All</button></div></form></div>
 
-  <div class="card" style='max-height:360px;overflow:auto'><h4>Balance Requests</h4>{% for r in reqs %}<div style="border:1px solid var(--line);padding:10px;border-radius:10px;margin-bottom:8px"><div>#{{r.id}} | amount {{'{:,.0f}'.format(r.amount)}} | admin {{r.admin_name}}</div><div class="actions"><form method='post' action='/balance/approve'><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form><form method='post' action='/balance/reject'><input type='hidden' name='req_id' value='{{r.id}}'><button class="btn-danger">Disapprove</button></form></div></div>{% endfor %}</div>
+  <div class="card" style='max-height:360px;overflow:auto'><h4>Balance Requests</h4><button class='btn-muted' style='margin-bottom:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button>{% for r in reqs %}<div style="border:1px solid var(--line);padding:10px;border-radius:10px;margin-bottom:8px"><div>#{{r.id}} | amount {{'{:,.0f}'.format(r.amount)}} | admin {{r.admin_name}}</div><div class="actions"><form method='post' action='/balance/approve'><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form><form method='post' action='/balance/reject'><input type='hidden' name='req_id' value='{{r.id}}'><button class="btn-danger">Disapprove</button></form></div></div>{% endfor %}</div>
   {% endif %}
 </div>
 
@@ -86,6 +100,7 @@
 <script>
 (function(){const t=localStorage.getItem('theme');if(t==='dark')document.body.classList.add('dark');})();
 function toggleTheme(btn){document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");btn.animate([{transform:"rotate(0) scale(1)"},{transform:"rotate(15deg) scale(1.2)"},{transform:"rotate(-15deg) scale(1.1)"},{transform:"rotate(0) scale(1)"}],{duration:500,easing:"ease"});}
+function toggleGearMenu(){document.getElementById('gearMenu').classList.toggle('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 function openLogs(){document.getElementById('logsModal').classList.add('show')}
 async function copyText(v){await navigator.clipboard.writeText(v);}

@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import os
+import subprocess
 from datetime import datetime, timedelta
 
 import qrcode
@@ -65,6 +66,13 @@ def parse_allowed_inbounds(raw: str):
     return sorted(ids)
 
 
+def detect_msg_type(msg: str) -> str:
+    text = (msg or "").lower()
+    if "error" in text or "fatal" in text or "invalid" in text or "failed" in text or "rejected" in text:
+        return "error"
+    return "success"
+
+
 @router.get('/', response_class=HTMLResponse)
 def home(request: Request, dbs=Depends(db), msg: str = ''):
     admin = current_admin(request, dbs)
@@ -96,11 +104,19 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
             client = XUIClient(panel_cfg['url'], panel_cfg['username'], panel_cfg['password'], panel_cfg.get('path', ''))
             for ib in client.list_inbounds():
                 inbounds.append({"id": ib.get("id"), "name": ib.get("remark") or ib.get("tag") or f"Inbound {ib.get('id')}"})
+            tehran_now = datetime.utcnow() + timedelta(hours=3, minutes=30)
+            for u in users:
+                last_online = client.get_client_last_online(u.inbound_id, u.username)
+                u.last_online_text = "-"
+                if isinstance(last_online, int) and last_online > 0:
+                    dt = datetime.utcfromtimestamp(last_online / 1000) + timedelta(hours=3, minutes=30)
+                    u.last_online_text = dt.strftime('%Y-%m-%d %H:%M:%S') + " (Tehran)"
+                u.last_online_fallback = tehran_now.strftime('%Y-%m-%d %H:%M:%S') + " (Tehran)"
         except Exception:
             inbounds = []
     allowed = parse_allowed_inbounds(admin.allowed_inbounds)
     usable_inbounds = [i for i in inbounds if (admin.is_super or not allowed or i["id"] in allowed)]
-    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'approved_reqs': approved_reqs, 'msg': msg, 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed, 'total_users': total_users, 'active_users': active_users, 'disabled_users': disabled_users})
+    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'approved_reqs': approved_reqs, 'msg': msg, 'msg_type': detect_msg_type(msg), 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed, 'total_users': total_users, 'active_users': active_users, 'disabled_users': disabled_users})
 
 
 @router.get('/login', response_class=HTMLResponse)
@@ -249,6 +265,23 @@ def approve(request:Request, req_id:int=Form(...), dbs=Depends(db)):
         ad.credit_toman += r.amount; r.approved=True; log(dbs,a.username,'balance',f'approve {ad.username} {r.amount}')
         dbs.commit()
     return RedirectResponse('/',303)
+
+
+@router.post('/system/restart')
+def restart_services(request: Request, dbs=Depends(db)):
+    a = current_admin(request, dbs)
+    if not a or not a.is_super:
+        return RedirectResponse('/', 303)
+    panel_service = os.getenv("PANEL_SERVICE_NAME", "x-ui")
+    app_service = os.getenv("APP_SERVICE_NAME", "web-helper")
+    try:
+        subprocess.run(["systemctl", "restart", panel_service], check=True)
+        subprocess.run(["systemctl", "restart", app_service], check=True)
+        log(dbs, a.username, "system", f"restart_success panel={panel_service} app={app_service}")
+        return RedirectResponse('/?msg=Services+restarted+successfully', 303)
+    except Exception as e:
+        log(dbs, a.username, "system", f"restart_failed panel={panel_service} app={app_service} error={e}")
+        return RedirectResponse('/?msg=Fatal:+restart+failed', 303)
 
 @router.get('/qr/{kind}/{user_id}', response_class=HTMLResponse)
 def qr(kind:str,user_id:int,request:Request,dbs=Depends(db)):
