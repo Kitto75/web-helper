@@ -50,3 +50,36 @@ python xui_cli.py --help
 - Password hashing uses `pbkdf2_sha256`.
 - Panel settings are stored through the application audit flow; keep server/database access restricted.
 - If you expose this publicly, run behind HTTPS and strong credentials.
+
+## Backup Restore Guide (Complete)
+To fully restore this panel on a new server, you mainly need the SQLite database file and (optionally) uploaded screenshots.
+
+### Files to copy from the old server
+1. `panel.db` (required): contains all admins, users, balances, panel config, and logs.
+2. `app/uploads/` (optional but recommended): contains balance request screenshots.
+
+### Restore steps on new server
+1. Install and run the same app version (or newer compatible version).
+2. Stop the running app service before replacing data files.
+3. Copy old `panel.db` into the new project root (same directory as `README.md`).
+4. If you want screenshots/history attachments, copy old `app/uploads/` into new `app/uploads/`.
+5. Ensure file ownership/permissions let the app user read/write `panel.db` and `app/uploads/`.
+6. Start the app service again.
+7. Login with your previous admin credentials and verify users/admins/history exist.
+
+### Example commands
+```bash
+# on old server
+tar czf panel-backup.tar.gz panel.db app/uploads
+
+# on new server (inside project root)
+systemctl stop web-helper
+tar xzf panel-backup.tar.gz
+chown -R <app-user>:<app-user> panel.db app/uploads
+systemctl start web-helper
+```
+
+### Important notes
+- If you restore only `panel.db`, the system works, but old screenshot files will be missing.
+- Restore should be done while service is stopped to avoid SQLite corruption/race conditions.
+- Keep backup files secure because they include panel access configuration and admin data.

@@ -47,6 +47,18 @@ class XUIClient:
             return None
         return None
 
+    def get_client_last_online(self, inbound_id: int, email: str):
+        inbound = self.get_inbound(inbound_id) or {}
+        stats = inbound.get("clientStats") or []
+        for st in stats:
+            if st.get("email") == email:
+                value = st.get("lastOnlineTime")
+                if isinstance(value, int):
+                    return value
+                if isinstance(value, str) and value.isdigit():
+                    return int(value)
+        return None
+
 
     def get_client_links(self, inbound_id:int, email:str, panel_base:str):
         inbound = self.get_inbound(inbound_id) or {}
