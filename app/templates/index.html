@@ -1,16 +1,33 @@
-<html><body><h3>{{admin.username}} {% if admin.is_super %}(Super Admin){% endif %}</h3><div>{{now}}</div>
-<h4>Create User</h4>
-<form method='post' action='/users/create'><input name='username' placeholder='lowercase+num only'/><input name='inbound_id' type='number' value='1'/><input name='traffic_gb' type='number' step='0.1'/><input name='expiry_days' type='number' value='30'/><button>Create</button></form>
+<!doctype html>
+<html><head><meta charset="utf-8"/><title>3x-ui Delegated Admin</title>
+<style>
+body{font-family:Inter,Arial,sans-serif;background:#f1f5f9;margin:0;padding:20px;color:#0f172a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 18px #94a3b833}input,button{padding:8px;border-radius:8px;border:1px solid #cbd5e1;margin:4px 0}button{background:#0ea5e9;color:#fff;border:none}h4{margin:6px 0 10px}
+.badge{display:inline-block;background:#e2e8f0;padding:4px 8px;border-radius:999px;font-size:12px}.msg{background:#dcfce7;padding:8px;border-radius:8px;margin:10px 0}
+</style></head><body>
+<h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %}</h2>
+<div>{{now}}</div>{% if msg %}<div class="msg">{{msg}}</div>{% endif %}
+<div class="grid">
+<div class="card"><h4>Create User</h4>
+<form method='post' action='/users/create'><input name='username' placeholder='lowercase+num only' required/><input name='inbound_id' type='number' value='1' required/><input name='traffic_gb' type='number' step='0.1' required/><input name='expiry_days' type='number' value='30'/><button>Create</button></form></div>
 {% if admin.is_super %}
-<h4>Create Admin</h4><form method='post' action='/admins/create'><input name='username'><input name='password'><input name='credit' type='number'><button>Create Admin</button></form>
-<form method='post' action='/admins/set_price_all'><input name='price' type='number'><button>Set Price All</button></form>
-<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='true'><button>Enable Admin Actions</button></form>
-<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='false'><button>Disable Admin Actions</button></form>
-<h4>Admins</h4>{% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman}} | price {{x.price_per_gb}} | active {{x.active}}</div>{% endfor %}
-<h4>Balance Requests</h4>{% for r in reqs %}<form method='post' action='/balance/approve'><span>{{r.id}} amount {{r.amount}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}
+<div class="card"><h4>3x-ui Panel Settings</h4>
+<form method='post' action='/panel/config'>
+<input name='panel_url' placeholder='http://127.0.0.1:2053' value='{{panel_cfg.url if panel_cfg else ""}}' required/>
+<input name='panel_path' placeholder='/xui' value='{{panel_cfg.path if panel_cfg else ""}}'/>
+<input name='panel_username' placeholder='panel username' value='{{panel_cfg.username if panel_cfg else ""}}' required/>
+<input name='panel_password' type='password' placeholder='panel password' required/>
+<button>Save Panel Settings</button></form></div>
+<div class="card"><h4>Create Admin</h4><form method='post' action='/admins/create'><input name='username' required><input name='password' type='password' required><input name='credit' type='number'><button>Create Admin</button></form>
+<form method='post' action='/admins/set_price_all'><input name='price' type='number' required><button>Set Price All</button></form>
+<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='true' hidden><button>Enable Admin Actions</button></form>
+<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='false' hidden><button>Disable Admin Actions</button></form></div>
 {% else %}
-<h4>Request Balance Increase</h4><form method='post' action='/balance/request' enctype='multipart/form-data'><input name='amount' type='number'><input name='message'><input type='file' name='screenshot'><button>Send</button></form>
+<div class="card"><h4>Request Balance Increase</h4><form method='post' action='/balance/request' enctype='multipart/form-data'><input name='amount' type='number' required><input name='message'><input type='file' name='screenshot'><button>Send</button></form></div>
 {% endif %}
-<h4>Users</h4>{% for u in users %}<div>{{u.username}} {{u.traffic_gb}}GB {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}
-<h4>Logs</h4>{% for l in logs %}<div>{{l.created_at}} [{{l.category}}] {{l.actor}} - {{l.detail}}</div>{% endfor %}
-</body></html>
+<div class="card"><h4>Users</h4>{% for u in users %}<div>{{u.username}} {{u.traffic_gb}}GB {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}</div>
+<div class="card"><h4>Logs</h4>{% for l in logs %}<div>{{l.created_at}} [{{l.category}}] {{l.actor}} - {{l.detail}}</div>{% endfor %}</div>
+{% if admin.is_super %}
+<div class="card"><h4>Admins</h4>{% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman}} | price {{x.price_per_gb}} | active {{x.active}}</div>{% endfor %}</div>
+<div class="card"><h4>Balance Requests</h4>{% for r in reqs %}<form method='post' action='/balance/approve'><span>#{{r.id}} amount {{r.amount}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}</div>
+{% endif %}
+</div></body></html>

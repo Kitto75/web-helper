@@ -1,1 +1,37 @@
-<html><body><h2>Login</h2><form method='post' action='/login'><input name='username'/><input name='password' type='password'/><button>Login</button></form></body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>3x-ui Admin Login</title>
+  <style>
+    body{font-family:Inter,Arial,sans-serif;background:linear-gradient(120deg,#0f172a,#1e293b);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#e2e8f0}
+    .card{background:#0b1220cc;border:1px solid #334155;border-radius:14px;padding:28px;width:360px;box-shadow:0 16px 40px #02061766}
+    input,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #475569;margin-top:10px;background:#0f172a;color:#e2e8f0}
+    button{background:#2563eb;border:none;font-weight:700;cursor:pointer}
+    .muted{color:#94a3b8;font-size:12px}
+    .err{background:#7f1d1d;padding:10px;border-radius:8px;margin-top:8px}
+  </style>
+</head>
+<body>
+<div class="card">
+  <h2>Welcome back</h2>
+  {% if err %}<div class="err">{{err}}</div>{% endif %}
+  <form method="post" action="/login">
+    <input name="username" placeholder="Username" required/>
+    <input name="password" type="password" placeholder="Password" required/>
+    <button>Login</button>
+  </form>
+
+  {% if needs_bootstrap %}
+  <hr style="border-color:#334155;margin:20px 0" />
+  <h3>First-time setup</h3>
+  <p class="muted">No admin found. Create your superadmin account.</p>
+  <form method="post" action="/bootstrap">
+    <input name="username" placeholder="Superadmin username" required/>
+    <input name="password" type="password" placeholder="Superadmin password" required/>
+    <button>Create Superadmin</button>
+  </form>
+  {% endif %}
+</div>
+</body>
+</html>
