@@ -25,7 +25,10 @@
 <body>
 <div class="topbar">
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %}</h2>
-  <button type="button" onclick="toggleTheme()" title="Switch dark/light mode">🌗 Dark Mode</button>
+  <div>
+    <button type="button" onclick="toggleTheme()" title="Switch dark/light mode">🌗 Dark Mode</button>
+    <form method="post" action="/logout" style="display:inline"><button type="submit">Logout</button></form>
+  </div>
 </div>
 {% if msg %}<div class="msg">{{msg}}</div>{% endif %}
 <div class="grid">
@@ -33,37 +36,38 @@
     <form method='post' action='/users/create'>
       <input name='username' placeholder='Username (lowercase + numbers)' title='New client username. Use lowercase letters and numbers only.' required/>
       <div class='hint'>Who this account belongs to.</div>
-      <input name='inbound_id' type='number' value='1' title='3x-ui inbound ID where this user should be created.' required/>
+      {% if usable_inbounds|length > 1 %}
+      <select name='inbound_id' required>{% for i in usable_inbounds %}<option value='{{i.id}}'>{{i.name}}</option>{% endfor %}</select>
+      {% elif usable_inbounds|length == 1 %}
+      <input type="hidden" name="inbound_id" value="{{usable_inbounds[0].id}}"/><div class='hint'>Inbound: {{usable_inbounds[0].name}}</div>
+      {% else %}
+      <input name='inbound_id' type='number' value='1' required/>
+      {% endif %}
       <div class='hint'>Which inbound to add this user to.</div>
       <input name='traffic_gb' type='number' step='1' title='Traffic limit in GB.' required/>
       <div class='hint'>Total traffic allocation in GB.</div>
       <input name='expiry_days' type='number' value='30' title='Number of days before this user expires.'/>
       <div class='hint'>Maximum 30 days.</div>
       <button>Create</button>
+      <a href="/"><button type="button">Cancel</button></a>
     </form>
   </div>
 
   {% if admin.is_super %}
-  <div class="card"><h4>3x-ui Panel Settings</h4>
-    <form method='post' action='/panel/config'>
-      <input name='panel_url' placeholder='Panel URL (e.g. http://127.0.0.1:2053)' value='{{panel_cfg.url if panel_cfg else ""}}' title='Base URL of your 3x-ui panel.' required/>
-      <input name='panel_path' placeholder='Panel Path (optional, e.g. /xui)' value='{{panel_cfg.path if panel_cfg else ""}}' title='Optional web path for panel. Leave empty if root.'/>
-      <input name='panel_username' placeholder='Panel username' value='{{panel_cfg.username if panel_cfg else ""}}' title='Username for 3x-ui login.' required/>
-      <input name='panel_password' type='password' placeholder='Panel password' title='Password for 3x-ui login.' required/>
-      <button>Save Panel Settings</button>
-    </form>
-  </div>
-
   <div class="card"><h4>Create Admin</h4>
     <form method='post' action='/admins/create'>
       <input name='username' placeholder='Admin username' title='New delegated admin username.' required>
       <input name='password' type='password' placeholder='Admin password' title='Password for delegated admin.' required>
       <input name='credit' type='number' step='1' placeholder='Initial credit' title='Starting credit for the admin (no decimals).'>
+      <div class="hint">Allowed inbounds (leave empty to allow all):</div>
+      {% for i in inbounds %}<label><input type="checkbox" name="inbound_ids" value="{{i.id}}"> {{i.name}}</label><br>{% endfor %}
       <button>Create Admin</button>
+      <a href="/"><button type="button">Cancel</button></a>
     </form>
     <form method='post' action='/admins/set_price_all'>
       <input name='price' type='number' step='1' placeholder='Price per GB' title='Set one global price for all admins (integer).' required>
       <button>Set Price All</button>
+      <a href="/"><button type="button">Cancel</button></a>
     </form>
   </div>
   {% else %}
@@ -73,17 +77,28 @@
       <input name='message' placeholder='Short note (optional)' title='Optional description for your request.'>
       <input type='file' name='screenshot' title='Optional payment proof screenshot.'>
       <button>Send</button>
+      <a href="/"><button type="button">Cancel</button></a>
     </form>
   </div>
   {% endif %}
 
-  <div class="card"><h4>Users</h4>{% for u in users %}<div>{{u.username}} | {{u.traffic_gb|int}}GB | {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}</div>
+  <div class="card"><h4>Users</h4>{% for u in users %}<div>{{u.username}} | {{u.inbound_name if u.inbound_name else ('Inbound #' ~ u.inbound_id)}} | {{u.traffic_gb|int}}GB | {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}</div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Admins</h4>
-    {% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman|int}} | price {{x.price_per_gb|int}} | active {{x.active}}</div>{% endfor %}
-    <details><summary>Logs</summary><div class='mono'>{% for l in logs %}{{l.created_at.strftime('%H:%M:%S')}} [{{l.category}}] {{l.actor}} - {{l.detail_short}}\n{% endfor %}</div></details>
-    <details><summary>Balance Requests</summary>{% for r in reqs %}<form method='post' action='/balance/approve'><span>#{{r.id}} amount {{r.amount|int}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}</details>
+    {% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman|int}} | price {{x.price_per_gb|int}} | active {{x.active}}
+      <form method="post" action="/admins/update">
+        <input type="hidden" name="admin_id" value="{{x.id}}">
+        <input name="price" type="number" step="1" value="{{x.price_per_gb|int}}" required>
+        <input name="credit" type="number" step="1" value="{{x.credit_toman|int}}" required>
+        <select name="active"><option value="true" {% if x.active %}selected{% endif %}>Active</option><option value="false" {% if not x.active %}selected{% endif %}>Disabled</option></select>
+        {% set selected = x.allowed_inbounds.split(',') if x.allowed_inbounds else [] %}
+        {% for i in inbounds %}<label><input type="checkbox" name="inbound_ids" value="{{i.id}}" {% if (i.id|string) in selected %}checked{% endif %}>{{i.name}}</label>{% endfor %}
+        <button>Update</button>
+      </form></div>{% endfor %}
+  </div>
+  <div class="card"><h4>Logs</h4><details open><summary>Recent Logs</summary><div class='mono'>{% for l in logs %}{{l.created_at.strftime('%H:%M:%S')}} [{{l.category}}] {{l.actor}} - {{l.detail_short}}\n{% endfor %}</div></details></div>
+  <div class="card"><h4>Balance Requests</h4><details open><summary>Pending Requests</summary>{% for r in reqs %}<form method='post' action='/balance/approve'><span>#{{r.id}} amount {{r.amount|int}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}</details>
   </div>
   {% else %}
   <div class="card"><details><summary>Logs</summary><div class='mono'>{% for l in logs %}{{l.created_at.strftime('%H:%M:%S')}} [{{l.category}}] {{l.detail_short}}\n{% endfor %}</div></details></div>

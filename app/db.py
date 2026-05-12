@@ -8,3 +8,7 @@ Base = declarative_base()
 def init_db():
     from . import models
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(admins)").fetchall()]
+        if "allowed_inbounds" not in cols:
+            conn.exec_driver_sql("ALTER TABLE admins ADD COLUMN allowed_inbounds TEXT DEFAULT ''")

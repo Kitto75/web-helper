@@ -17,3 +17,6 @@ class XUIClient:
     def add_client(self,inbound_id:int,email:str,total_gb:float,expiry_ms:int,comment:str):
         payload={"clients":[{"id":str(uuid.uuid4()),"email":email,"limitIp":0,"totalGB":int(total_gb*1024**3),"expiryTime":expiry_ms,"enable":True,"subId":uuid.uuid4().hex[:16],"comment":comment,"flow":"","reset":0}]}
         return self.call('POST','/inbounds/addClient',data={'id':inbound_id,'settings':json.dumps(payload)})
+    def list_inbounds(self):
+        data = self.call('GET', '/inbounds/list')
+        return data.get('obj') or []
