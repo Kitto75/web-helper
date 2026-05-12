@@ -20,3 +20,9 @@ class XUIClient:
     def list_inbounds(self):
         data = self.call('GET', '/inbounds/list')
         return data.get('obj') or []
+
+    @staticmethod
+    def is_success(resp:dict) -> bool:
+        if not isinstance(resp, dict):
+            return False
+        return bool(resp.get('success') is True)

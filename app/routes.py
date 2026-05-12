@@ -147,34 +147,46 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
     if not a or not a.active or ADMIN_LOCK:
         return RedirectResponse('/', 303)
     if not valid_username(username):
+        log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=invalid_username')
         return RedirectResponse('/?msg=Username+must+be+lowercase+and+numeric', 303)
     expiry_days = min(expiry_days or 30, 30)
     if traffic_gb <= 0:
+        log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=invalid_traffic traffic_gb={traffic_gb}')
         return RedirectResponse('/?msg=Traffic+must+be+greater+than+0', 303)
     cost = traffic_gb * a.price_per_gb
     if cost > a.credit_toman:
+        log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=insufficient_credit cost={cost} credit={a.credit_toman}')
         return RedirectResponse('/?msg=Insufficient+credit', 303)
     allowed = parse_allowed_inbounds(a.allowed_inbounds)
     if (not a.is_super) and allowed and inbound_id not in allowed:
+        log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=inbound_not_allowed inbound_id={inbound_id} allowed={allowed}')
         return RedirectResponse('/?msg=Inbound+is+not+allowed+for+your+account', 303)
 
     cfg = get_panel_config(dbs)
     if not cfg:
+        log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=missing_panel_config')
         return RedirectResponse('/?msg=Set+3x-ui+panel+settings+first', 303)
 
     expiry_ms = int((datetime.utcnow() + timedelta(days=expiry_days)).timestamp() * 1000)
     client = XUIClient(cfg['url'], cfg['username'], cfg['password'], cfg.get('path', ''))
     try:
-        client.add_client(inbound_id=inbound_id, email=username, total_gb=traffic_gb, expiry_ms=expiry_ms, comment=f'created by {a.username}')
+        log(dbs, a.username, 'user_create', f'request_start username={username} inbound_id={inbound_id} traffic_gb={traffic_gb} expiry_days={expiry_days}')
+        api_result = client.add_client(inbound_id=inbound_id, email=username, total_gb=traffic_gb, expiry_ms=expiry_ms, comment=f'created by {a.username}')
     except Exception as e:
+        log(dbs, a.username, 'user_create', f'3xui_exception username={username} error={str(e)}')
         return RedirectResponse(f'/?msg=3x-ui+error:+{str(e)}', 303)
+
+    if not client.is_success(api_result):
+        reason = (api_result or {}).get('msg') if isinstance(api_result, dict) else 'unknown_error'
+        log(dbs, a.username, 'user_create', f'3xui_rejected username={username} inbound_id={inbound_id} response={json.dumps(api_result, ensure_ascii=False)}')
+        return RedirectResponse(f'/?msg=3x-ui+rejected+request:+{reason}', 303)
 
     a.credit_toman -= cost
     sub = f"{cfg['url'].rstrip('/')}/sub/{username}"
     panel_base = cfg['url'].rstrip('/') + cfg.get('path', '')
     user_cfg = f'{panel_base}/panel/inbounds'
     dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg))
-    log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d')
+    log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d inbound_id={inbound_id}')
     dbs.commit()
     return RedirectResponse('/?msg=User+created+successfully', 303)
 
