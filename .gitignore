@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+panel.db
+.venv/
