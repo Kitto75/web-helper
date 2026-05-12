@@ -1,0 +1,16 @@
+<html><body><h3>{{admin.username}} {% if admin.is_super %}(Super Admin){% endif %}</h3><div>{{now}}</div>
+<h4>Create User</h4>
+<form method='post' action='/users/create'><input name='username' placeholder='lowercase+num only'/><input name='inbound_id' type='number' value='1'/><input name='traffic_gb' type='number' step='0.1'/><input name='expiry_days' type='number' value='30'/><button>Create</button></form>
+{% if admin.is_super %}
+<h4>Create Admin</h4><form method='post' action='/admins/create'><input name='username'><input name='password'><input name='credit' type='number'><button>Create Admin</button></form>
+<form method='post' action='/admins/set_price_all'><input name='price' type='number'><button>Set Price All</button></form>
+<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='true'><button>Enable Admin Actions</button></form>
+<form method='post' action='/toggle-all-admin-actions'><input name='enabled' value='false'><button>Disable Admin Actions</button></form>
+<h4>Admins</h4>{% for x in admins %}<div>{{x.username}} | credit {{x.credit_toman}} | price {{x.price_per_gb}} | active {{x.active}}</div>{% endfor %}
+<h4>Balance Requests</h4>{% for r in reqs %}<form method='post' action='/balance/approve'><span>{{r.id}} amount {{r.amount}} admin {{r.admin_id}}</span><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form>{% endfor %}
+{% else %}
+<h4>Request Balance Increase</h4><form method='post' action='/balance/request' enctype='multipart/form-data'><input name='amount' type='number'><input name='message'><input type='file' name='screenshot'><button>Send</button></form>
+{% endif %}
+<h4>Users</h4>{% for u in users %}<div>{{u.username}} {{u.traffic_gb}}GB {{u.expiry_days}}d <a href='/qr/sub/{{u.id}}'>sub qr</a> <a href='/qr/config/{{u.id}}'>cfg qr</a></div>{% endfor %}
+<h4>Logs</h4>{% for l in logs %}<div>{{l.created_at}} [{{l.category}}] {{l.actor}} - {{l.detail}}</div>{% endfor %}
+</body></html>
