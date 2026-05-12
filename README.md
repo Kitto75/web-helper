@@ -11,6 +11,7 @@ FastAPI-based server-side panel plus Python CLI wrapper for 3x-ui APIs.
 - QR rendering for subscription/config links.
 - Tehran timezone shown in UI.
 - Customizable web path/port/SSL in uvicorn startup command.
+- Interactive setup script for superadmin + 3x-ui panel credentials.
 
 ## Install
 ```bash
@@ -19,14 +20,41 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## First run
+## Run server
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 38291
 ```
-Then create initial superadmin:
+
+## One-command interactive setup (recommended)
+After the server is running, execute:
+```bash
+python setup_panel.py
+```
+The script asks for:
+- App URL (default: `http://127.0.0.1:38291`)
+- Superadmin username/password
+- 3x-ui panel URL
+- 3x-ui panel web base path (example: `/xui`, leave empty if not used)
+- 3x-ui panel username/password
+
+It will:
+1. Create the initial superadmin (bootstrap).
+2. Log in automatically.
+3. Save your 3x-ui panel connection settings.
+
+## Manual setup (alternative)
+Create initial superadmin:
 ```bash
 curl -X POST -F 'username=superadmin' -F 'password=StrongPass123!' http://127.0.0.1:38291/bootstrap
 ```
+Then log in to the web UI and fill **3x-ui Panel Settings**:
+- panel link address (`panel_url`)
+- panel username
+- panel password
+- optional panel web path (`panel_path`)
+
+## Password hashing note
+This project uses `pbkdf2_sha256` for password hashing to avoid bcrypt runtime issues on some environments.
 
 ## Change superadmin username/password later
 After the app is already running and initialized, you can update superadmin credentials directly in the SQLite DB:
