@@ -70,7 +70,7 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
     admin = current_admin(request, dbs)
     if not admin:
         return RedirectResponse('/login')
-    users = dbs.scalars(select(UserAccount).where(UserAccount.admin_id == admin.id if not admin.is_super else True)).all()
+    users = dbs.scalars(select(UserAccount) if admin.is_super else select(UserAccount).where(UserAccount.admin_id == admin.id)).all()
     logs = dbs.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(100)).all() if admin.is_super else dbs.scalars(select(AuditLog).where(AuditLog.actor == admin.username).order_by(AuditLog.id.desc()).limit(100)).all()
     for entry in logs:
         short = (entry.detail or '').strip()
@@ -81,6 +81,14 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
         entry.detail_short = short
     admins = dbs.scalars(select(Admin)).all() if admin.is_super else []
     reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == False)).all() if admin.is_super else []
+
+    admin_name_by_id = {x.id: x.username for x in dbs.scalars(select(Admin)).all()} if admin.is_super else {}
+    for r in reqs:
+        r.admin_name = admin_name_by_id.get(r.admin_id, f"#{r.admin_id}")
+    approved_reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == True)).all() if admin.is_super else dbs.scalars(select(BalanceRequest).where(BalanceRequest.admin_id == admin.id, BalanceRequest.approved == True)).all()
+    total_users = len(users)
+    active_users = sum(1 for u in users if u.enabled)
+    disabled_users = total_users - active_users
     panel_cfg = get_panel_config(dbs)
     inbounds = []
     if panel_cfg:
@@ -92,7 +100,7 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
             inbounds = []
     allowed = parse_allowed_inbounds(admin.allowed_inbounds)
     usable_inbounds = [i for i in inbounds if (admin.is_super or not allowed or i["id"] in allowed)]
-    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'msg': msg, 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed})
+    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'approved_reqs': approved_reqs, 'msg': msg, 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed, 'total_users': total_users, 'active_users': active_users, 'disabled_users': disabled_users})
 
 
 @router.get('/login', response_class=HTMLResponse)
@@ -194,7 +202,12 @@ def create_admin(request:Request, username:str=Form(...), password:str=Form(...)
     a=current_admin(request,dbs)
     if not a or not a.is_super: return RedirectResponse('/',303)
     allowed = ",".join(str(i) for i in sorted(set(inbound_ids)))
-    dbs.add(Admin(username=username,password_hash=hash_password(password),credit_toman=credit,is_super=False,allowed_inbounds=allowed)); dbs.commit(); log(dbs,a.username,'admin',f'created {username}'); return RedirectResponse('/',303)
+    try:
+        dbs.add(Admin(username=username,password_hash=hash_password(password),credit_toman=credit,is_super=False,allowed_inbounds=allowed)); dbs.commit(); log(dbs,a.username,'admin',f'created {username}')
+    except Exception:
+        dbs.rollback()
+        return RedirectResponse('/?msg=Error:+admin+username+already+exists',303)
+    return RedirectResponse('/',303)
 
 @router.post('/admins/set_price_all')
 def price_all(request:Request, price:float=Form(...), dbs=Depends(db)):

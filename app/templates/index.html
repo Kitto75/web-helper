@@ -34,15 +34,15 @@
     .qr-box{border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
     .qr-box img{max-width:240px;border-radius:12px;cursor:pointer;transition:transform .15s ease}.qr-box img:hover{transform:scale(1.02)}
     .small{font-size:12px;color:var(--muted)}
-    @keyframes fade{from{opacity:0}to{opacity:1}} @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+    @keyframes fade{from{opacity:0}to{opacity:1}} @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}} .theme-btn{position:relative;overflow:hidden}.error-pop{background:#ef444422;border-color:#ef4444aa;animation:shake .4s ease}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
   </style>
 </head>
 <body>
 <div class="topbar">
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %} <span class="badge">Balance: {{'{:,.0f}'.format(admin.credit_toman)}}</span></h2>
-  <div class="actions" style="min-width:260px"><button type="button" class="btn-muted" onclick="toggleTheme()">🌗 Theme</button><form method="post" action="/logout"><button>Logout</button></form></div>
+  <div class="actions" style="min-width:260px"><button type="button" id="themeBtn" class="btn-muted theme-btn" onclick="toggleTheme(this)">🪄 Theme Shift</button><form method="post" action="/logout"><button>Logout</button></form></div>
 </div>
-{% if msg %}<div class="msg">{{msg}}</div>{% endif %}
+{% if msg %}<div class="msg error-pop">{{msg}}</div>{% endif %}
 <div class="grid">
   <div class="card"><h4>Create User</h4><form method='post' action='/users/create'>
     <input name='username' placeholder='Username' required/>
@@ -59,10 +59,10 @@
     <button>Create Admin</button></form></div>
   {% else %}
   <div class="card"><h4>Request Balance Increase</h4><form method='post' action='/balance/request' enctype='multipart/form-data'>
-    <input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'><input type='file' name='screenshot'><button>Send Request</button></form></div>
+    <div class='row2'><input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'></div><input type='file' name='screenshot'><button>Send Request</button></form><button class='btn-muted' style='margin-top:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button></div>
   {% endif %}
 
-  <div class="card"><h4>Users</h4><table><tr><th>Username</th><th>Traffic</th><th>Expiry</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}})'>{{u.username}}</span></td><td>{{u.traffic_gb|int}}GB</td><td>{{u.expiry_days}}d</td></tr>{% endfor %}</table></div>
+  <div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.created_at.strftime('%Y-%m-%d %H:%M:%S'))|tojson}})'>{{u.username}}</span></td><td>{{'active' if u.enabled else 'disabled'}}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td></tr>{% endfor %}</table></div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Admins</h4>{% for x in admins %}<form method="post" action="/admins/update" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px">
@@ -74,29 +74,23 @@
   </form>{% endfor %}
   <form method='post' action='/admins/set_price_all'><div class="row2"><input name='price' type='number' step='1' placeholder='Global price / GB' required><button>Set Price for All</button></div></form></div>
 
-  <div class="card"><h4>Balance Requests</h4>{% for r in reqs %}<div style="border:1px solid var(--line);padding:10px;border-radius:10px;margin-bottom:8px"><div>#{{r.id}} | amount {{'{:,.0f}'.format(r.amount)}} | admin {{r.admin_id}}</div><div class="actions"><form method='post' action='/balance/approve'><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form><form method='post' action='/balance/reject'><input type='hidden' name='req_id' value='{{r.id}}'><button class="btn-danger">Disapprove</button></form></div></div>{% endfor %}</div>
+  <div class="card" style='max-height:360px;overflow:auto'><h4>Balance Requests</h4>{% for r in reqs %}<div style="border:1px solid var(--line);padding:10px;border-radius:10px;margin-bottom:8px"><div>#{{r.id}} | amount {{'{:,.0f}'.format(r.amount)}} | admin {{r.admin_name}}</div><div class="actions"><form method='post' action='/balance/approve'><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form><form method='post' action='/balance/reject'><input type='hidden' name='req_id' value='{{r.id}}'><button class="btn-danger">Disapprove</button></form></div></div>{% endfor %}</div>
   {% endif %}
 </div>
 
-<button class="fab btn-muted" onclick="openLogs()">📜 Logs</button>
-<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><img id="subQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><img id="cfgQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
-<div class="overlay" id="logsModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('logsModal')">Close</button><h3>Logs</h3><form method="get" action="/"><button style="max-width:180px">Refresh logs</button></form><table><tr><th>Time</th><th>Category</th>{% if admin.is_super %}<th>Actor</th>{% endif %}<th>Details</th></tr>{% for l in logs %}<tr><td>{{l.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td><td>{{l.category}}</td>{% if admin.is_super %}<td>{{l.actor}}</td>{% endif %}<td class="mono">{{l.detail_short}}</td></tr>{% endfor %}</table></div></div>
-
+<button class="fab btn-muted" onclick="openLogs()">📜 Logs</button>{% if not admin.is_super %}<button class='fab btn-muted' style='right:130px' onclick="document.getElementById('txnModal').classList.add('show')">💳 Transaction History</button>{% endif %}
+<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div id='lastOnline' class='hint'></div><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><img id="subQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><img id="cfgQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
+<div class="overlay" id="logsModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('logsModal')">Close</button><h3>Logs</h3><button style="max-width:180px" onclick='refreshLogs(event)'>Refresh logs</button><table id='logsTable'><tr><th>Time</th><th>Category</th>{% if admin.is_super %}<th>Actor</th>{% endif %}<th>Details</th></tr>{% for l in logs %}<tr><td>{{l.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td><td>{{l.category}}</td>{% if admin.is_super %}<td>{{l.actor}}</td>{% endif %}<td class="mono">{{l.detail_short}}</td></tr>{% endfor %}</table></div></div>
+<div class="overlay" id="txnModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('txnModal')">Close</button><h3>Approved Requests</h3><table><tr><th>ID</th><th>Amount</th><th>Message</th></tr>{% for r in approved_reqs %}<tr><td>{{r.id}}</td><td>{{'{:,.0f}'.format(r.amount)}}</td><td>{{r.message}}</td></tr>{% endfor %}</table></div></div>
+<div class="overlay" id="balanceHistoryModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('balanceHistoryModal')">Close</button><h3>Balance Requests History</h3><table><tr><th>ID</th><th>Amount</th><th>Status</th><th>Message</th></tr>{% for r in approved_reqs %}<tr><td>{{r.id}}</td><td>{{'{:,.0f}'.format(r.amount)}}</td><td>Approved</td><td>{{r.message}}</td></tr>{% endfor %}</table></div></div>
 <script>
 (function(){const t=localStorage.getItem('theme');if(t==='dark')document.body.classList.add('dark');})();
-function toggleTheme(){document.body.classList.toggle('dark');localStorage.setItem('theme',document.body.classList.contains('dark')?'dark':'light');}
+function toggleTheme(btn){document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");btn.animate([{transform:"rotate(0) scale(1)"},{transform:"rotate(15deg) scale(1.2)"},{transform:"rotate(-15deg) scale(1.1)"},{transform:"rotate(0) scale(1)"}],{duration:500,easing:"ease"});}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 function openLogs(){document.getElementById('logsModal').classList.add('show')}
-function makeQRData(link){return 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data='+encodeURIComponent(link)}
 async function copyText(v){await navigator.clipboard.writeText(v);}
-function openUserModal(id, username, sub, cfg){
-  document.getElementById('modalUser').innerText = 'User: '+username;
-  document.getElementById('subLink').innerText = sub;
-  document.getElementById('cfgLink').innerText = cfg;
-  const subQR = document.getElementById('subQR'); const cfgQR = document.getElementById('cfgQR');
-  subQR.src = makeQRData(sub); cfgQR.src = makeQRData(cfg);
-  subQR.onclick = ()=>copyText(sub); cfgQR.onclick=()=>copyText(cfg);
-  document.getElementById('userModal').classList.add('show');
-}
+function openUserModal(id, username, sub, cfg, lastSeen){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('subLink').innerText=sub;document.getElementById('cfgLink').innerText=cfg;const subQR=document.getElementById('subQR');const cfgQR=document.getElementById('cfgQR');subQR.src='/qr/sub/'+id;cfgQR.src='/qr/cfg/'+id;subQR.onclick=()=>copyText(sub);cfgQR.onclick=()=>copyText(cfg);document.getElementById('userModal').classList.add('show');}
+function filterUsers(){const q=document.getElementById("userSearch").value.toLowerCase();document.querySelectorAll("#usersTable tr").forEach((r,i)=>{if(i===0)return;r.style.display=r.innerText.toLowerCase().includes(q)?"":"none";});}
+async function refreshLogs(e){e.preventDefault();const r=await fetch(location.pathname);const t=await r.text();const d=new DOMParser().parseFromString(t,"text/html");document.querySelector("#logsTable").innerHTML=d.querySelector("#logsTable").innerHTML;}
 </script>
 </body></html>
