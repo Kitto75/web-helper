@@ -56,6 +56,15 @@ def log(dbs, actor, cat, detail):
     dbs.commit()
 
 
+def parse_allowed_inbounds(raw: str):
+    ids = set()
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.add(int(part))
+    return sorted(ids)
+
+
 @router.get('/', response_class=HTMLResponse)
 def home(request: Request, dbs=Depends(db), msg: str = ''):
     admin = current_admin(request, dbs)
@@ -73,7 +82,20 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
     admins = dbs.scalars(select(Admin)).all() if admin.is_super else []
     reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == False)).all() if admin.is_super else []
     panel_cfg = get_panel_config(dbs)
-    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'msg': msg, 'panel_cfg': panel_cfg})
+    inbounds = []
+    if panel_cfg:
+        try:
+            client = XUIClient(panel_cfg['url'], panel_cfg['username'], panel_cfg['password'], panel_cfg.get('path', ''))
+            for ib in client.list_inbounds():
+                inbounds.append({"id": ib.get("id"), "name": ib.get("remark") or ib.get("tag") or f"Inbound {ib.get('id')}"})
+        except Exception:
+            inbounds = []
+    inbound_map = {i["id"]: i["name"] for i in inbounds}
+    for u in users:
+        u.inbound_name = inbound_map.get(u.inbound_id)
+    allowed = parse_allowed_inbounds(admin.allowed_inbounds)
+    usable_inbounds = [i for i in inbounds if (admin.is_super or not allowed or i["id"] in allowed)]
+    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'msg': msg, 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed})
 
 
 @router.get('/login', response_class=HTMLResponse)
@@ -90,6 +112,13 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
         resp.set_cookie('sess', ser.dumps({'uid': admin.id}), httponly=True, samesite='lax')
         return resp
     return RedirectResponse('/login?err=Invalid+credentials', status_code=303)
+
+
+@router.post('/logout')
+def logout():
+    resp = RedirectResponse('/login', status_code=303)
+    resp.delete_cookie('sess')
+    return resp
 
 
 @router.post('/bootstrap')
@@ -125,6 +154,9 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
     cost = traffic_gb * a.price_per_gb
     if cost > a.credit_toman:
         return RedirectResponse('/?msg=Insufficient+credit', 303)
+    allowed = parse_allowed_inbounds(a.allowed_inbounds)
+    if (not a.is_super) and allowed and inbound_id not in allowed:
+        return RedirectResponse('/?msg=Inbound+is+not+allowed+for+your+account', 303)
 
     cfg = get_panel_config(dbs)
     if not cfg:
@@ -148,10 +180,11 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
 
 # unchanged endpoints below
 @router.post('/admins/create')
-def create_admin(request:Request, username:str=Form(...), password:str=Form(...), credit:float=Form(0), dbs=Depends(db)):
+def create_admin(request:Request, username:str=Form(...), password:str=Form(...), credit:float=Form(0), inbound_ids:list[int]=Form([]), dbs=Depends(db)):
     a=current_admin(request,dbs)
     if not a or not a.is_super: return RedirectResponse('/',303)
-    dbs.add(Admin(username=username,password_hash=hash_password(password),credit_toman=credit,is_super=False)); dbs.commit(); log(dbs,a.username,'admin',f'created {username}'); return RedirectResponse('/',303)
+    allowed = ",".join(str(i) for i in sorted(set(inbound_ids)))
+    dbs.add(Admin(username=username,password_hash=hash_password(password),credit_toman=credit,is_super=False,allowed_inbounds=allowed)); dbs.commit(); log(dbs,a.username,'admin',f'created {username}'); return RedirectResponse('/',303)
 
 @router.post('/admins/set_price_all')
 def price_all(request:Request, price:float=Form(...), dbs=Depends(db)):
@@ -161,10 +194,10 @@ def price_all(request:Request, price:float=Form(...), dbs=Depends(db)):
     dbs.commit(); return RedirectResponse('/',303)
 
 @router.post('/admins/update')
-def admin_update(request:Request, admin_id:int=Form(...), price:float=Form(...), credit:float=Form(...), active:bool=Form(True), dbs=Depends(db)):
+def admin_update(request:Request, admin_id:int=Form(...), price:float=Form(...), credit:float=Form(...), active:str=Form("true"), inbound_ids:list[int]=Form([]), dbs=Depends(db)):
     a=current_admin(request,dbs)
     if not a or not a.is_super: return RedirectResponse('/',303)
-    ad=dbs.get(Admin,admin_id); ad.price_per_gb=price; ad.credit_toman=credit; ad.active=active; dbs.commit(); return RedirectResponse('/',303)
+    ad=dbs.get(Admin,admin_id); ad.price_per_gb=price; ad.credit_toman=credit; ad.active=(active=="true"); ad.allowed_inbounds=",".join(str(i) for i in sorted(set(inbound_ids))); dbs.commit(); return RedirectResponse('/',303)
 
 @router.post('/toggle-all-admin-actions')
 def toggle_all(request:Request, enabled:bool=Form(...), dbs=Depends(db)):

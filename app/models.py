@@ -12,6 +12,7 @@ class Admin(Base):
     active: Mapped[bool]=mapped_column(Boolean, default=True)
     credit_toman: Mapped[float]=mapped_column(Float, default=0)
     price_per_gb: Mapped[float]=mapped_column(Float, default=100000)
+    allowed_inbounds: Mapped[str]=mapped_column(Text, default='')
 
 class UserAccount(Base):
     __tablename__='users'
