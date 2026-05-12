@@ -1,4 +1,5 @@
 import httpx, uuid, json
+from urllib.parse import quote
 
 class XUIClient:
     def __init__(self, base_url:str, username:str, password:str, web_base_path:str=''):
@@ -45,3 +46,40 @@ class XUIClient:
         except Exception:
             return None
         return None
+
+
+    def get_client_links(self, inbound_id:int, email:str, panel_base:str):
+        inbound = self.get_inbound(inbound_id) or {}
+        settings_raw = inbound.get("settings")
+        stream_raw = inbound.get("streamSettings")
+        remark = inbound.get("remark") or f"inbound-{inbound_id}"
+        if not settings_raw:
+            return {"subscription": f"{panel_base}/sub/{email}", "config": ""}
+        try:
+            settings = json.loads(settings_raw) if isinstance(settings_raw, str) else (settings_raw or {})
+            clients = settings.get("clients") or []
+        except Exception:
+            clients = []
+        client = next((c for c in clients if c.get("email") == email), None)
+        sub_id = (client or {}).get("subId")
+        subscription = f"{panel_base}/sub/{sub_id}" if sub_id else f"{panel_base}/sub/{email}"
+
+        config = ""
+        if client:
+            try:
+                stream = json.loads(stream_raw) if isinstance(stream_raw, str) else (stream_raw or {})
+            except Exception:
+                stream = {}
+            net = stream.get("network") or "tcp"
+            security = stream.get("security") or "none"
+            xhttp = stream.get("xhttpSettings") or {}
+            path = xhttp.get("path") or "/"
+            host = (xhttp.get("host") or "")
+            mode = xhttp.get("mode") or "auto"
+            host_port = inbound.get("port") or 443
+            host_addr = inbound.get("listen") or "127.0.0.1"
+            cid = client.get("id")
+            if cid:
+                tag = quote(f"{remark}-{email}")
+                config = f"vless://{cid}@{host_addr}:{host_port}?type={net}&encryption=none&path={quote(path)}&host={quote(host)}&mode={mode}&security={security}#{tag}"
+        return {"subscription": subscription, "config": config}

@@ -180,9 +180,9 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
 
     a.credit_toman -= cost
     panel_base = cfg['url'].rstrip('/') + cfg.get('path', '')
-    sub_id = client.get_client_sub_id(inbound_id=inbound_id, email=username)
-    sub = f"{panel_base}/sub/{sub_id}" if sub_id else f"{panel_base}/sub/{username}"
-    user_cfg = f'{panel_base}/panel/inbounds'
+    links = client.get_client_links(inbound_id=inbound_id, email=username, panel_base=panel_base)
+    sub = links.get("subscription") or f"{panel_base}/sub/{username}"
+    user_cfg = links.get("config") or f'{panel_base}/panel/inbounds'
     dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg))
     log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d inbound_id={inbound_id}')
     dbs.commit()
