@@ -24,6 +24,12 @@ def ask(prompt: str, default: str = "", required: bool = True) -> str:
 
 def main() -> int:
     print("=== web-helper setup ===")
+    use_ssl = ask("Run app with SSL/HTTPS? (yes/no)", "no").lower() in {"y", "yes"}
+    ssl_fullchain = ""
+    ssl_privkey = ""
+    if use_ssl:
+        ssl_fullchain = ask("Path to fullchain.pem")
+        ssl_privkey = ask("Path to privkey.pem")
     base = ask("App URL", "http://127.0.0.1:38291").rstrip("/")
 
     admin_user = ask("Superadmin username")
@@ -70,6 +76,9 @@ def main() -> int:
 
     print("✅ Setup complete.")
     print(f"Open {base}/ and log in as '{admin_user}'.")
+    if use_ssl:
+        print("To run web-helper with HTTPS, use:")
+        print(f"uvicorn app.main:app --host 0.0.0.0 --port 38291 --ssl-certfile {ssl_fullchain} --ssl-keyfile {ssl_privkey}")
     return 0
 
 

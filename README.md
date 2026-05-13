@@ -41,11 +41,15 @@ python setup_panel.py
 ```
 
 You will be asked for:
+- Whether you want to run with SSL/HTTPS (`yes/no`)
+- If SSL is `yes`: path to `fullchain.pem` and `privkey.pem`
 - App URL (default: `http://127.0.0.1:38291`)
 - Superadmin username/password
 - 3x-ui panel URL
 - Optional panel path (for example `/xui`)
 - 3x-ui panel credentials
+
+If you enable SSL in setup, the script also prints a ready-to-run `uvicorn` HTTPS command.
 
 ## Manual Bootstrap
 ```bash
@@ -159,3 +163,44 @@ systemctl start web-helper
 - If you restore only `panel.db`, the system works, but old screenshot files will be missing.
 - Restore should be done while service is stopped to avoid SQLite corruption/race conditions.
 - Keep backup files secure because they include panel access configuration and admin data.
+
+## Login Rate Limit
+- Login is limited per client IP after **3 failed attempts** (wrong username or password).
+- Limited IPs are blocked for **30 minutes**.
+- Security events are written to audit logs with IP and attempted username so superadmin can review them.
+
+## Systemd Example (project in /root)
+If your project is at `/root/web-helper`, use this service:
+
+```ini
+[Unit]
+Description=web-helper FastAPI service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/web-helper
+Environment="PATH=/root/web-helper/.venv/bin"
+ExecStart=/root/web-helper/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 38291
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+HTTPS variant:
+
+```ini
+ExecStart=/root/web-helper/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 38291 --ssl-certfile /etc/letsencrypt/live/example.com/fullchain.pem --ssl-keyfile /etc/letsencrypt/live/example.com/privkey.pem
+```
+
+Then reload and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable web-helper
+sudo systemctl restart web-helper
+sudo systemctl status web-helper
+```
