@@ -105,8 +105,9 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
             for ib in client.list_inbounds():
                 inbounds.append({"id": ib.get("id"), "name": ib.get("remark") or ib.get("tag") or f"Inbound {ib.get('id')}"})
             tehran_now = datetime.utcnow() + timedelta(hours=3, minutes=30)
+            online_map = client.build_last_online_map()
             for u in users:
-                last_online = client.get_client_last_online(u.inbound_id, u.username)
+                last_online = online_map.get((u.inbound_id, u.username))
                 u.last_online_text = "-"
                 if isinstance(last_online, int) and last_online > 0:
                     dt = datetime.utcfromtimestamp(last_online / 1000) + timedelta(hours=3, minutes=30)
@@ -233,10 +234,13 @@ def price_all(request:Request, price:float=Form(...), dbs=Depends(db)):
     dbs.commit(); return RedirectResponse('/',303)
 
 @router.post('/admins/update')
-def admin_update(request:Request, admin_id:int=Form(...), price:float=Form(...), credit:float=Form(...), active:str=Form("true"), inbound_ids:list[int]=Form([]), dbs=Depends(db)):
+def admin_update(request:Request, admin_id:int=Form(...), price:float=Form(...), credit:float=Form(...), active:str=Form("true"), inbound_ids:list[int]=Form([]), new_password:str=Form(''), dbs=Depends(db)):
     a=current_admin(request,dbs)
     if not a or not a.is_super: return RedirectResponse('/',303)
-    ad=dbs.get(Admin,admin_id); ad.price_per_gb=price; ad.credit_toman=credit; ad.active=(active=="true"); ad.allowed_inbounds=",".join(str(i) for i in sorted(set(inbound_ids))); dbs.commit(); return RedirectResponse('/',303)
+    ad=dbs.get(Admin,admin_id); ad.price_per_gb=price; ad.credit_toman=credit; ad.active=(active=="true")
+    if new_password.strip():
+        ad.password_hash=hash_password(new_password.strip())
+    ad.allowed_inbounds=",".join(str(i) for i in sorted(set(inbound_ids))); dbs.commit(); return RedirectResponse('/',303)
 
 @router.post('/toggle-all-admin-actions')
 def toggle_all(request:Request, enabled:bool=Form(...), dbs=Depends(db)):
@@ -278,7 +282,7 @@ def restart_services(request: Request, dbs=Depends(db)):
         subprocess.run(["systemctl", "restart", panel_service], check=True)
         subprocess.run(["systemctl", "restart", app_service], check=True)
         log(dbs, a.username, "system", f"restart_success panel={panel_service} app={app_service}")
-        return RedirectResponse('/?msg=Services+restarted+successfully', 303)
+        return RedirectResponse('/?msg=Restart+command+sent+successfully', 303)
     except Exception as e:
         log(dbs, a.username, "system", f"restart_failed panel={panel_service} app={app_service} error={e}")
         return RedirectResponse('/?msg=Fatal:+restart+failed', 303)
@@ -312,7 +316,19 @@ def toggle_user(request:Request, user_id:int=Form(...), enabled:str=Form(...), d
     u=dbs.get(UserAccount,user_id)
     if not u or u.admin_id!=a.id:
         return RedirectResponse('/',303)
-    u.enabled=(enabled=="true")
+    next_enabled=(enabled=="true")
+    cfg=get_panel_config(dbs)
+    if cfg:
+        try:
+            client=XUIClient(cfg['url'],cfg['username'],cfg['password'],cfg.get('path',''))
+            result=client.set_client_enabled(u.inbound_id,u.username,next_enabled)
+            if not client.is_success(result):
+                log(dbs,a.username,'user',f'toggle_failed {u.username} enabled={next_enabled} reason={result}')
+                return RedirectResponse('/?msg=Failed+to+sync+status+with+3x-ui',303)
+        except Exception as e:
+            log(dbs,a.username,'user',f'toggle_failed {u.username} enabled={next_enabled} error={str(e)}')
+            return RedirectResponse('/?msg=Failed+to+sync+status+with+3x-ui',303)
+    u.enabled=next_enabled
     log(dbs,a.username,'user',f'toggle {u.username} enabled={u.enabled}')
     dbs.commit()
-    return RedirectResponse('/',303)
+    return RedirectResponse('/?msg=User+status+updated',303)

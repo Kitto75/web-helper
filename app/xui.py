@@ -60,6 +60,39 @@ class XUIClient:
                     return int(value)
         return None
 
+    def build_last_online_map(self):
+        last_seen = {}
+        for inbound in self.list_inbounds() or []:
+            inbound_id = inbound.get("id")
+            for st in inbound.get("clientStats") or []:
+                email = st.get("email")
+                value = st.get("lastOnlineTime")
+                if inbound_id is None or not email:
+                    continue
+                if isinstance(value, str) and value.isdigit():
+                    value = int(value)
+                if isinstance(value, int) and value > 0:
+                    last_seen[(inbound_id, email)] = value
+        return last_seen
+
+    def set_client_enabled(self, inbound_id: int, email: str, enabled: bool):
+        inbound = self.get_inbound(inbound_id) or {}
+        settings_raw = inbound.get("settings")
+        if not settings_raw:
+            return {"success": False, "msg": "inbound settings not found"}
+        settings = json.loads(settings_raw) if isinstance(settings_raw, str) else (settings_raw or {})
+        clients = settings.get("clients") or []
+        found = False
+        for c in clients:
+            if c.get("email") == email:
+                c["enable"] = bool(enabled)
+                found = True
+                break
+        if not found:
+            return {"success": False, "msg": "client not found"}
+        payload = {"clients": clients}
+        return self.call("POST", "/inbounds/updateClient", data={"id": inbound_id, "settings": json.dumps(payload)})
+
 
 
     def get_panel_settings(self):
