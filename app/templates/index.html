@@ -39,8 +39,9 @@
     .gear-wrap{position:relative}.gear-menu{position:absolute;right:0;top:44px;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:none;z-index:20}
     .gear-menu.show{display:block}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
-<body>
+<body class="dark">
 <div class="topbar">
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %} <span class="badge">Balance: {{'{:,.0f}'.format(admin.credit_toman)}}</span></h2>
   <div class="actions" style="min-width:260px">
@@ -61,9 +62,9 @@
   <div class="card"><h4>Create User</h4><form method='post' action='/users/create'>
     <input name='username' placeholder='Username' required/>
     {% if usable_inbounds|length > 1 %}<select name='inbound_id' required>{% for i in usable_inbounds %}<option value='{{i.id}}'>{{i.name}}</option>{% endfor %}</select>{% elif usable_inbounds|length == 1 %}<input type="hidden" name="inbound_id" value="{{usable_inbounds[0].id}}"/><div class='hint'>Inbound: {{usable_inbounds[0].name}}</div>{% else %}<input name='inbound_id' type='number' value='1' required/>{% endif %}
-    <div class="row2"><input name='traffic_gb' type='number' step='1' placeholder='Traffic GB' required/><input name='expiry_days' type='number' value='30' placeholder='Expiry days'/></div>
-    <div class="hint">Subscription token and links are fetched from panel after user creation.</div>
-    <button>Create User</button></form></div>
+    <div class="row2"><input id='trafficGb' name='traffic_gb' type='number' step='1' placeholder='Traffic GB' required oninput='updateCost()'/><input name='expiry_days' type='number' value='30' placeholder='Expiry days'/></div><textarea name='admin_comment' placeholder='Private comment for your panel (optional)'></textarea><div class='hint'>Your price per GB: {{'{:,.0f}'.format(admin.price_per_gb)}} | Estimated deduction: <span id='costPreview'>0</span> Toman</div>
+    
+    <button onclick="return confirmCreateUser()">Create User</button></form></div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Create Admin</h4><form method='post' action='/admins/create'>
@@ -76,7 +77,7 @@
     <div class='row2'><input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'></div><input type='file' name='screenshot'><button>Send Request</button></form><button class='btn-muted' style='margin-top:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button></div>
   {% endif %}
 
-  <div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}})'>{{u.username}}</span></td><td>{{'active' if u.enabled else 'disabled'}}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table></div>
+  <div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users or comments...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}})'>{{u.username}}</span><div class="small">{{u.admin_comment or ''}}</div></td><td>{{'active' if u.enabled else 'disabled'}}{% if not admin.is_super %}<form method='post' action='/users/toggle' style='margin-top:6px'><input type='hidden' name='user_id' value='{{u.id}}'><input type='hidden' name='enabled' value='{{ "false" if u.enabled else "true" }}'><button class='btn-muted' style='padding:6px 8px'>{{ "Deactivate" if u.enabled else "Activate" }}</button></form>{% endif %}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table></div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Admins</h4>{% for x in admins %}<form method="post" action="/admins/update" style="border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px">
@@ -92,20 +93,23 @@
   {% endif %}
 </div>
 
-<button class="fab btn-muted" onclick="openLogs()">📜 Logs</button>{% if not admin.is_super %}<button class='fab btn-muted' style='right:130px' onclick="document.getElementById('txnModal').classList.add('show')">💳 Transaction History</button>{% endif %}
-<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div id='lastOnline' class='hint'></div><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><img id="subQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><img id="cfgQR"/><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
+{% if admin.is_super %}<button class="fab btn-muted" onclick="openLogs()">📜 Logs</button>{% endif %}
+<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div id='lastOnline' class='hint'></div><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><div id="subQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><div id="cfgQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
 <div class="overlay" id="logsModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('logsModal')">Close</button><h3>Logs</h3><button style="max-width:180px" onclick='refreshLogs(event)'>Refresh logs</button><table id='logsTable'><tr><th>Time</th><th>Category</th>{% if admin.is_super %}<th>Actor</th>{% endif %}<th>Details</th></tr>{% for l in logs %}<tr><td>{{l.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td><td>{{l.category}}</td>{% if admin.is_super %}<td>{{l.actor}}</td>{% endif %}<td class="mono">{{l.detail_short}}</td></tr>{% endfor %}</table></div></div>
-<div class="overlay" id="txnModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('txnModal')">Close</button><h3>Approved Requests</h3><table><tr><th>ID</th><th>Amount</th><th>Message</th></tr>{% for r in approved_reqs %}<tr><td>{{r.id}}</td><td>{{'{:,.0f}'.format(r.amount)}}</td><td>{{r.message}}</td></tr>{% endfor %}</table></div></div>
+
 <div class="overlay" id="balanceHistoryModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('balanceHistoryModal')">Close</button><h3>Balance Requests History</h3><table><tr><th>ID</th><th>Amount</th><th>Status</th><th>Message</th></tr>{% for r in approved_reqs %}<tr><td>{{r.id}}</td><td>{{'{:,.0f}'.format(r.amount)}}</td><td>Approved</td><td>{{r.message}}</td></tr>{% endfor %}</table></div></div>
 <script>
 (function(){const t=localStorage.getItem('theme');if(t==='dark')document.body.classList.add('dark');})();
-function toggleTheme(btn){document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");btn.animate([{transform:"rotate(0) scale(1)"},{transform:"rotate(15deg) scale(1.2)"},{transform:"rotate(-15deg) scale(1.1)"},{transform:"rotate(0) scale(1)"}],{duration:500,easing:"ease"});}
 function toggleGearMenu(){document.getElementById('gearMenu').classList.toggle('show')}
 function closeModal(id){document.getElementById(id).classList.remove('show')}
 function openLogs(){document.getElementById('logsModal').classList.add('show')}
 async function copyText(v){await navigator.clipboard.writeText(v);}
-function openUserModal(id, username, sub, cfg, lastSeen){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('subLink').innerText=sub;document.getElementById('cfgLink').innerText=cfg;const subQR=document.getElementById('subQR');const cfgQR=document.getElementById('cfgQR');subQR.src='/qr/sub/'+id;cfgQR.src='/qr/cfg/'+id;subQR.onclick=()=>copyText(sub);cfgQR.onclick=()=>copyText(cfg);document.getElementById('userModal').classList.add('show');}
 function filterUsers(){const q=document.getElementById("userSearch").value.toLowerCase();document.querySelectorAll("#usersTable tr").forEach((r,i)=>{if(i===0)return;r.style.display=r.innerText.toLowerCase().includes(q)?"":"none";});}
 async function refreshLogs(e){e.preventDefault();const r=await fetch(location.pathname);const t=await r.text();const d=new DOMParser().parseFromString(t,"text/html");document.querySelector("#logsTable").innerHTML=d.querySelector("#logsTable").innerHTML;}
+function updateCost(){const gb=parseFloat(document.getElementById('trafficGb')?.value||0);const price={{admin.price_per_gb|int}};document.getElementById('costPreview').innerText=(gb*price).toLocaleString();}
+function confirmCreateUser(){return confirm('Are you sure you want to create this user? Balance will be deducted.');}
+function toggleTheme(btn){const rect=btn.getBoundingClientRect();const x=rect.left+rect.width/2;const y=rect.top+rect.height/2;const ripple=document.createElement('div');ripple.style.cssText=`position:fixed;left:${x}px;top:${y}px;width:20px;height:20px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%) scale(0);z-index:9999;pointer-events:none;`;document.body.appendChild(ripple);ripple.animate([{transform:'translate(-50%,-50%) scale(0)'},{transform:'translate(-50%,-50%) scale(120)',opacity:.15}],{duration:550,easing:'ease-out'});setTimeout(()=>ripple.remove(),600);document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");}
+function renderQR(elId,text){const el=document.getElementById(elId);el.innerHTML='';if(!text)return;new QRCode(el,{text,width:220,height:220,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});el.onclick=()=>copyText(text);}
+function openUserModal(id, username, sub, cfg, lastSeen){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('subLink').innerText=sub;document.getElementById('cfgLink').innerText=cfg;renderQR('subQR',sub);renderQR('cfgQR',cfg);document.getElementById('userModal').classList.add('show');}
 </script>
 </body></html>

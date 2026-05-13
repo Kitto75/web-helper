@@ -51,14 +51,14 @@ python xui_cli.py --help
 - Panel settings are stored through the application audit flow; keep server/database access restricted.
 - If you expose this publicly, run behind HTTPS and strong credentials.
 
-## Backup Restore Guide (Complete)
+## Backup & Restore
 To fully restore this panel on a new server, you mainly need the SQLite database file and (optionally) uploaded screenshots.
 
-### Files to copy from the old server
+### What to back up
 1. `panel.db` (required): contains all admins, users, balances, panel config, and logs.
 2. `app/uploads/` (optional but recommended): contains balance request screenshots.
 
-### Restore steps on new server
+### How to restore
 1. Install and run the same app version (or newer compatible version).
 2. Stop the running app service before replacing data files.
 3. Copy old `panel.db` into the new project root (same directory as `README.md`).
