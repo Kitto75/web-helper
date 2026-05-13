@@ -46,6 +46,26 @@ curl -X POST -F 'username=superadmin' -F 'password=StrongPass123!' http://127.0.
 python xui_cli.py --help
 ```
 
+## Useful Commands
+```bash
+# run web panel (dev)
+uvicorn app.main:app --host 0.0.0.0 --port 38291 --reload
+
+# bootstrap superadmin from terminal
+curl -X POST -F 'username=superadmin' -F 'password=StrongPass123!' http://127.0.0.1:38291/bootstrap
+
+# initial interactive setup for panel + 3x-ui
+python setup_panel.py
+
+# inspect CLI options
+python xui_cli.py --help
+
+# when running as systemd service
+systemctl status web-helper
+systemctl restart web-helper
+journalctl -u web-helper -n 200 --no-pager
+```
+
 ## Notes
 - Password hashing uses `pbkdf2_sha256`.
 - Panel settings are stored through the application audit flow; keep server/database access restricted.

@@ -57,20 +57,17 @@
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %} <span class="badge">Balance: {{'{:,.0f}'.format(admin.credit_toman)}}</span></h2>
   <div class="actions" style="min-width:260px">
     <button type="button" id="themeBtn" class="btn-muted theme-btn" onclick="toggleTheme(this)">🪄 Theme Shift</button>
-    <div class="gear-wrap">
-      <button type="button" class="btn-muted" onclick="toggleLinkSettings(event)">⚙️ Link Port</button>
-      <div id="linkSettingsMenu" class="gear-menu">
-        <label class="small" for="subPortInput">Subscription port</label>
-        <input id="subPortInput" type="number" min="1" max="65535" placeholder="8443" oninput="onPortInputChange()">
-        <label class="checkitem" style="margin-top:8px"><input id="emptyPortCheck" type="checkbox" onchange="onEmptyPortToggle()"><span>Empty (remove :port)</span></label>
-        <div class="small" style="margin-top:6px">Applies to shown subscription links and QR codes.</div>
-      </div>
-    </div>
     {% if admin.is_super %}
     <div class="gear-wrap">
       <button type="button" class="btn-muted" onclick="toggleGearMenu()">⚙️</button>
       <div id="gearMenu" class="gear-menu">
         <form method="post" action="/system/restart"><button class="btn-danger">Restart Panel + Service</button></form>
+        <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+        <label class="small" for="subPortInput">Subscription port</label>
+        <input id="subPortInput" type="number" min="1" max="65535" placeholder="8443">
+        <label class="checkitem" style="margin-top:8px"><input id="emptyPortCheck" type="checkbox" onchange="onEmptyPortToggle()"><span>Empty (remove :port)</span></label>
+        <button type="button" style="margin-top:8px" onclick="applyPortSettings()">Apply</button>
+        <div class="small" style="margin-top:6px">Applies to shown subscription links and QR codes.</div>
       </div>
     </div>
     {% endif %}
@@ -97,7 +94,18 @@
     <div class='row2'><input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'></div><input type='file' name='screenshot'><button>Send Request</button></form><button class='btn-muted' style='margin-top:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button></div>
   {% endif %}
 
-<div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users or comments...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}}, {{(u.creator_name or "-")|tojson}})'>{{u.username}}</span><div class="small">{{u.admin_comment or ''}}</div></td><td>{% set st = u.status_state if u.status_state is defined else ('active' if u.enabled else 'disabled') %}{% if not admin.is_super %}<form method='post' action='/users/toggle'><input type='hidden' name='user_id' value='{{u.id}}'><input type='hidden' name='enabled' value='{{ "false" if u.enabled else "true" }}'><button class='status-btn {% if st=="active" %}green{% elif st=="limited" %}yellow{% else %}red{% endif %}'>{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</button></form>{% else %}<span class="badge {% if st=='active' %}green{% elif st=='limited' %}yellow{% else %}red{% endif %}">{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</span>{% endif %}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table><div class="pager"><a href="/?users_page=1&admins_page={{admins_page}}">First</a><a href="/?users_page={{users_page+1 if users_page < users_pages else users_pages}}&admins_page={{admins_page}}">Next</a><span>{{users_page}} / {{users_pages}}</span></div></div>
+<div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users or comments...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}}, {{(u.creator_name or "-")|tojson}})'>{{u.username}}</span><div class="small">{{u.admin_comment or ''}}</div></td><td>{% set st = u.status_state if u.status_state is defined else ('active' if u.enabled else 'disabled') %}{% if not admin.is_super %}<form method='post' action='/users/toggle'><input type='hidden' name='user_id' value='{{u.id}}'><input type='hidden' name='enabled' value='{{ "false" if u.enabled else "true" }}'><button class='status-btn {% if st=="active" %}green{% elif st=="limited" %}yellow{% else %}red{% endif %}'>{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</button></form>{% else %}<span class="badge {% if st=='active' %}green{% elif st=='limited' %}yellow{% else %}red{% endif %}">{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</span>{% endif %}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table><div class="pager">
+{% if users_pages <= 7 %}
+  {% for p in range(1, users_pages + 1) %}<a href="/?users_page={{p}}&admins_page={{admins_page}}">{{p}}</a>{% endfor %}
+{% else %}
+  <a href="/?users_page=1&admins_page={{admins_page}}">1</a>
+  {% if users_page > 2 %}<span>...</span>{% endif %}
+  {% if users_page > 1 and users_page < users_pages %}<a href="/?users_page={{users_page}}&admins_page={{admins_page}}">{{users_page}}</a>{% endif %}
+  {% if users_page + 1 < users_pages %}<a href="/?users_page={{users_page+1}}&admins_page={{admins_page}}">{{users_page+1}}</a>{% endif %}
+  {% if users_page + 2 < users_pages %}<span>...</span>{% endif %}
+  <a href="/?users_page={{users_pages}}&admins_page={{admins_page}}">{{users_pages}}</a>
+{% endif %}
+</div></div>
 
   {% if admin.is_super %}
   <div class="card"><h4>Admins</h4><input id="adminSearch" placeholder="Search admins..." oninput="filterAdmins()">{% for x in admins %}<details class="admin-item"><summary><strong>{{x.username}}</strong></summary><form method="post" action="/admins/update" style="padding-top:10px">
@@ -108,7 +116,18 @@
     <div class="checkgrid">{% for i in inbounds %}<label class="checkitem"><input type="checkbox" name="inbound_ids" value="{{i.id}}" {% if (i.id|string) in selected %}checked{% endif %}><span>{{i.name}}</span></label>{% endfor %}</div>
     <button>Save Admin</button>
   </form></details>{% endfor %}
-  <div class="pager"><a href="/?admins_page=1&users_page={{users_page}}">First</a><a href="/?admins_page={{admins_page+1 if admins_page < admins_pages else admins_pages}}&users_page={{users_page}}">Next</a><span>{{admins_page}} / {{admins_pages}}</span></div>
+  <div class="pager">
+{% if admins_pages <= 7 %}
+  {% for p in range(1, admins_pages + 1) %}<a href="/?admins_page={{p}}&users_page={{users_page}}">{{p}}</a>{% endfor %}
+{% else %}
+  <a href="/?admins_page=1&users_page={{users_page}}">1</a>
+  {% if admins_page > 2 %}<span>...</span>{% endif %}
+  {% if admins_page > 1 and admins_page < admins_pages %}<a href="/?admins_page={{admins_page}}&users_page={{users_page}}">{{admins_page}}</a>{% endif %}
+  {% if admins_page + 1 < admins_pages %}<a href="/?admins_page={{admins_page+1}}&users_page={{users_page}}">{{admins_page+1}}</a>{% endif %}
+  {% if admins_page + 2 < admins_pages %}<span>...</span>{% endif %}
+  <a href="/?admins_page={{admins_pages}}&users_page={{users_page}}">{{admins_pages}}</a>
+{% endif %}
+</div>
   <form method='post' action='/admins/set_price_all'><div class="row2"><input name='price' type='number' step='1' placeholder='Global price / GB' required><button>Set Price for All</button></div></form></div>
 
   <div class="card" style='max-height:360px;overflow:auto'><h4>Balance Requests</h4><button class='btn-muted' style='margin-bottom:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button>{% for r in reqs %}<div style="border:1px solid var(--line);padding:10px;border-radius:10px;margin-bottom:8px"><div>#{{r.id}} | amount {{'{:,.0f}'.format(r.amount)}} | admin {{r.admin_name}}</div><div class="actions"><form method='post' action='/balance/approve'><input type='hidden' name='req_id' value='{{r.id}}'><button>Approve</button></form><form method='post' action='/balance/reject'><input type='hidden' name='req_id' value='{{r.id}}'><button class="btn-danger">Disapprove</button></form></div></div>{% endfor %}</div>
@@ -148,8 +167,7 @@ function parseStoredPortSettings(){
   }catch(_){}
 }
 function storePortSettings(){localStorage.setItem('subscriptionPortSettings',JSON.stringify(portSettings));}
-function toggleLinkSettings(e){e?.stopPropagation();document.getElementById('linkSettingsMenu').classList.toggle('show');}
-document.addEventListener('click',(e)=>{const m=document.getElementById('linkSettingsMenu');if(!m)return;if(!m.parentElement.contains(e.target))m.classList.remove('show');});
+
 function rewriteUrlPort(raw){
   if(!raw)return raw;
   try{
@@ -164,6 +182,14 @@ function applyCurrentPortSettingToModal(){
   const nextSub=rewriteUrlPort(lastOriginalSub);
   document.getElementById('subLink').innerText=nextSub;
   renderQR('subQR',nextSub);
+}
+function applyPortSettings(){
+  const input=document.getElementById('subPortInput');
+  const val=parseInt(input.value,10);
+  if(Number.isInteger(val)&&val>=1&&val<=65535){portSettings.value=val;portSettings.empty=false;document.getElementById('emptyPortCheck').checked=false;}
+  else if(input.value===''){portSettings.value=null;}
+  storePortSettings();
+  applyCurrentPortSettingToModal();
 }
 function onPortInputChange(){
   const input=document.getElementById('subPortInput');

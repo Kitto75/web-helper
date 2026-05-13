@@ -228,7 +228,7 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
     a.credit_toman -= cost
     panel_base = cfg['url'].rstrip('/') + cfg.get('path', '')
     links = client.get_client_links(inbound_id=inbound_id, email=username, panel_base=panel_base)
-    sub = links.get("subscription") or f"{panel_base}/sub/{username}"
+    sub = links.get("subscription") or client.apply_subscription_port(f"{panel_base}/sub/{username}")
     user_cfg = links.get("config") or f'{panel_base}/panel/inbounds'
     dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg, admin_comment=admin_comment.strip()))
     log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d inbound_id={inbound_id}')

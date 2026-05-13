@@ -150,29 +150,39 @@ class XUIClient:
         data = self.call('GET', '/setting/all')
         return data.get('obj') if isinstance(data, dict) else {}
 
+    def _subscription_settings(self):
+        settings = self.get_panel_settings() or {}
+        sub_port = settings.get('subPort') or settings.get('subscribePort') or settings.get('subscriptionPort')
+        sub_path = (
+            settings.get('subURIPath')
+            or settings.get('subPath')
+            or settings.get('subURI')
+            or settings.get('subscribePath')
+            or '/sub/'
+        )
+        if not isinstance(sub_path, str) or not sub_path.strip():
+            sub_path = '/sub/'
+        if not sub_path.startswith('/'):
+            sub_path = '/' + sub_path
+        return sub_port, sub_path.rstrip('/')
+
     def apply_subscription_port(self, subscription_url: str):
         try:
-            settings = self.get_panel_settings() or {}
-            sub_port = (
-                settings.get('subPort')
-                or settings.get('subscribePort')
-                or settings.get('subscriptionPort')
-            )
-            sub_path = settings.get('subURIPath') or settings.get('subPath') or '/sub/'
-            if sub_port is None:
-                return subscription_url
+            sub_port, sub_path = self._subscription_settings()
             parts = urlsplit(subscription_url)
-            host = parts.hostname or ''
-            netloc = f"{host}:{int(sub_port)}"
-            if parts.username:
-                auth = parts.username
-                if parts.password:
-                    auth += f":{parts.password}"
-                netloc = f"{auth}@{netloc}"
             path = parts.path
-            if "/sub/" in path and sub_path:
-                token = path.split("/sub/", 1)[1]
-                path = f"{sub_path.rstrip('/')}/{token}"
+            if '/sub/' in path and sub_path:
+                token = path.split('/sub/', 1)[1]
+                path = f"{sub_path}/{token}"
+            netloc = parts.netloc
+            if sub_port is not None:
+                host = parts.hostname or ''
+                netloc = f"{host}:{int(sub_port)}"
+                if parts.username:
+                    auth = parts.username
+                    if parts.password:
+                        auth += f":{parts.password}"
+                    netloc = f"{auth}@{netloc}"
             return urlunsplit((parts.scheme, netloc, path, parts.query, parts.fragment))
         except Exception:
             return subscription_url
@@ -183,7 +193,8 @@ class XUIClient:
         stream_raw = inbound.get("streamSettings")
         remark = inbound.get("remark") or f"inbound-{inbound_id}"
         if not settings_raw:
-            return {"subscription": f"{panel_base}/sub/{email}", "config": ""}
+            _, sub_path = self._subscription_settings()
+            return {"subscription": f"{panel_base}{sub_path}/{email}", "config": ""}
         try:
             settings = json.loads(settings_raw) if isinstance(settings_raw, str) else (settings_raw or {})
             clients = settings.get("clients") or []
@@ -191,7 +202,8 @@ class XUIClient:
             clients = []
         client = next((c for c in clients if c.get("email") == email), None)
         sub_id = (client or {}).get("subId")
-        subscription = f"{panel_base}/sub/{sub_id}" if sub_id else f"{panel_base}/sub/{email}"
+        _, sub_path = self._subscription_settings()
+        subscription = f"{panel_base}{sub_path}/{sub_id}" if sub_id else f"{panel_base}{sub_path}/{email}"
         subscription = self.apply_subscription_port(subscription)
 
         config = ""
