@@ -295,14 +295,30 @@ def restart_services(request: Request, dbs=Depends(db)):
         return RedirectResponse('/', 303)
     panel_service = os.getenv("PANEL_SERVICE_NAME", "x-ui")
     app_service = os.getenv("APP_SERVICE_NAME", "web-helper")
-    try:
-        subprocess.run(["systemctl", "restart", panel_service], check=True)
-        subprocess.run(["systemctl", "restart", app_service], check=False)
+    def _try_restart(service_name: str):
+        attempts = [
+            ["systemctl", "restart", service_name],
+            ["service", service_name, "restart"],
+        ]
+        last_error = "unknown"
+        for cmd in attempts:
+            try:
+                proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                return True, cmd, (proc.stdout or "").strip()
+            except Exception as exc:
+                last_error = str(exc)
+        return False, attempts[-1], last_error
+
+    panel_ok, panel_cmd, panel_out = _try_restart(panel_service)
+    app_ok, app_cmd, app_out = _try_restart(app_service)
+    if panel_ok and app_ok:
         log(dbs, a.username, "system", f"restart_success panel={panel_service} app={app_service}")
         return RedirectResponse('/?msg=Restart+command+sent+successfully', 303)
-    except Exception as e:
-        log(dbs, a.username, "system", f"restart_failed panel={panel_service} app={app_service} error={e}")
-        return RedirectResponse('/?msg=Fatal:+restart+failed', 303)
+
+    detail = f"panel_ok={panel_ok} panel_cmd={' '.join(panel_cmd)} panel_err={panel_out} app_ok={app_ok} app_cmd={' '.join(app_cmd)} app_err={app_out}"
+    log(dbs, a.username, "system", f"restart_failed panel={panel_service} app={app_service} {detail}")
+    msg = quote_plus("Restart failed. Check service names and system service manager.")
+    return RedirectResponse(f'/?msg={msg}', 303)
 
 @router.get('/qr/{kind}/{user_id}', response_class=HTMLResponse)
 def qr(kind:str,user_id:int,request:Request,dbs=Depends(db)):

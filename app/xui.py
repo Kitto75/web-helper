@@ -9,11 +9,32 @@ class XUIClient:
         self.client=httpx.Client(follow_redirects=True, timeout=20)
         self.auth=False
     def login(self):
-        r=self.client.post(f'{self.base}/login', json={'username':self.username,'password':self.password})
-        self.auth=r.status_code<400
-        return self.auth
+        payload = {'username': self.username, 'password': self.password}
+        attempts = (
+            {"json": payload},
+            {"data": payload},
+        )
+        for kwargs in attempts:
+            try:
+                r = self.client.post(f'{self.base}/login', **kwargs)
+            except Exception:
+                continue
+            if r.status_code >= 400:
+                continue
+            try:
+                body = r.json()
+                if isinstance(body, dict) and body.get("success") is False:
+                    continue
+            except Exception:
+                # Some panel versions redirect or return HTML on successful login.
+                pass
+            self.auth = True
+            return True
+        self.auth = False
+        return False
     def call(self, method, path, **kwargs):
-        if not self.auth: self.login()
+        if not self.auth and not self.login():
+            raise RuntimeError("3x-ui login failed")
         r=self.client.request(method, f'{self.base}/panel/api{path}', **kwargs)
         r.raise_for_status(); return r.json()
     def add_client(self,inbound_id:int,email:str,total_gb:float,expiry_ms:int,comment:str):
