@@ -5,6 +5,7 @@ import os
 import subprocess
 from urllib.parse import quote_plus
 from datetime import datetime, timedelta
+import logging
 
 import qrcode
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -22,6 +23,57 @@ router = APIRouter()
 templates = Jinja2Templates('app/templates')
 ser = URLSafeSerializer('change-me')
 ADMIN_LOCK = False
+
+
+LOGIN_LIMIT_WINDOW = timedelta(minutes=30)
+LOGIN_MAX_ATTEMPTS = 3
+FAILED_LOGIN_ATTEMPTS: dict[str, dict[str, object]] = {}
+logger = logging.getLogger(__name__)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get('x-forwarded-for', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return 'unknown'
+
+
+def _is_ip_limited(ip: str) -> tuple[bool, int]:
+    now = datetime.utcnow()
+    state = FAILED_LOGIN_ATTEMPTS.get(ip)
+    if not state:
+        return False, 0
+    locked_until = state.get('locked_until')
+    if isinstance(locked_until, datetime) and locked_until > now:
+        remaining = int((locked_until - now).total_seconds() // 60) + 1
+        return True, max(remaining, 1)
+    if isinstance(locked_until, datetime) and locked_until <= now:
+        FAILED_LOGIN_ATTEMPTS.pop(ip, None)
+    return False, 0
+
+
+def _register_login_failure(dbs, ip: str, username: str):
+    now = datetime.utcnow()
+    state = FAILED_LOGIN_ATTEMPTS.get(ip, {'count': 0, 'first_failed_at': now, 'locked_until': None})
+    first_failed_at = state.get('first_failed_at')
+    if not isinstance(first_failed_at, datetime) or (now - first_failed_at) > LOGIN_LIMIT_WINDOW:
+        state = {'count': 0, 'first_failed_at': now, 'locked_until': None}
+    state['count'] = int(state.get('count', 0)) + 1
+    state['first_failed_at'] = state.get('first_failed_at') or now
+    if state['count'] >= LOGIN_MAX_ATTEMPTS:
+        locked_until = now + LOGIN_LIMIT_WINDOW
+        state['locked_until'] = locked_until
+        log(dbs, 'system', 'security', f'login_ip_limited ip={ip} username={username} reason=wrong_username_or_password locked_until={locked_until.isoformat()}')
+        logger.warning('Login rate limit activated for ip=%s username=%s locked_until=%s', ip, username, locked_until.isoformat())
+    else:
+        state['locked_until'] = None
+    FAILED_LOGIN_ATTEMPTS[ip] = state
+
+
+def _clear_login_failures(ip: str):
+    FAILED_LOGIN_ATTEMPTS.pop(ip, None)
 
 
 def db():
@@ -148,11 +200,20 @@ def login_page(request: Request, dbs=Depends(db), err: str = ''):
 
 @router.post('/login')
 def login(request: Request, username: str = Form(...), password: str = Form(...), dbs=Depends(db)):
+    ip = _client_ip(request)
+    limited, remaining = _is_ip_limited(ip)
+    if limited:
+        log(dbs, 'system', 'security', f'limited_login_attempt ip={ip} username={username} remaining_minutes={remaining}')
+        return RedirectResponse(f'/login?err=Too+many+failed+attempts.+Try+again+in+{remaining}+minutes', status_code=303)
+
     admin = dbs.scalar(select(Admin).where(Admin.username == username))
     if admin and verify_password(password, admin.password_hash) and admin.active:
+        _clear_login_failures(ip)
         resp = RedirectResponse('/', status_code=303)
         resp.set_cookie('sess', ser.dumps({'uid': admin.id}), httponly=True, samesite='lax')
         return resp
+
+    _register_login_failure(dbs, ip=ip, username=username)
     return RedirectResponse('/login?err=Invalid+credentials', status_code=303)
 
 
