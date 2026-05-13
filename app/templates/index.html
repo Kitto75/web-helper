@@ -19,6 +19,9 @@
     .btn-muted{background:transparent;color:var(--text);border:1px solid var(--line)}
     .hint{color:var(--muted);font-size:12px;margin:4px 0 8px}
     .badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px}
+    .badge.green{background:#16a34a22;border-color:#16a34a88;color:#16a34a}
+    .badge.red{background:#dc262622;border-color:#dc262688;color:#dc2626}
+    .badge.yellow{background:#f59e0b22;border-color:#f59e0b88;color:#b45309}
     .msg{background:#22c55e22;border:1px solid #22c55e55;padding:10px;border-radius:10px;margin:10px 0}
     .msg.error{background:#ef444422;border:1px solid #ef4444aa}
     .checkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
@@ -39,6 +42,10 @@
     .pager{display:flex;gap:8px;align-items:center;margin-top:10px}.pager a{padding:6px 10px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text)}
     details.admin-item{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
     .small{font-size:12px;color:var(--muted)}
+    .status-btn{padding:6px 8px;color:#fff;border:none}
+    .status-btn.green{background:linear-gradient(120deg,#16a34a,#22c55e)}
+    .status-btn.red{background:linear-gradient(120deg,#dc2626,#ef4444)}
+    .status-btn.yellow{background:linear-gradient(120deg,#ca8a04,#f59e0b)}
     @keyframes fade{from{opacity:0}to{opacity:1}} @keyframes pop{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}} .theme-btn{position:relative;overflow:hidden}.error-pop{animation:shake .4s ease}@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
     .gear-wrap{position:relative}.gear-menu{position:absolute;right:0;top:44px;min-width:220px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;display:none;z-index:20}
     .gear-menu.show{display:block}
@@ -81,10 +88,10 @@
     <div class='row2'><input name='amount' type='number' step='1' placeholder='Requested amount' required><input name='message' placeholder='Message'></div><input type='file' name='screenshot'><button>Send Request</button></form><button class='btn-muted' style='margin-top:8px' onclick="document.getElementById('balanceHistoryModal').classList.add('show')">Balance Requests History</button></div>
   {% endif %}
 
-<div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users or comments...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}}, {{(u.creator_name or "-")|tojson}})'>{{u.username}}</span><div class="small">{{u.admin_comment or ''}}</div></td><td>{% if not admin.is_super %}<form method='post' action='/users/toggle'><input type='hidden' name='user_id' value='{{u.id}}'><input type='hidden' name='enabled' value='{{ "false" if u.enabled else "true" }}'><button class='btn-muted' style='padding:6px 8px'>{{'active' if u.enabled else 'disabled'}}</button></form>{% else %}{{'active' if u.enabled else 'disabled'}}{% endif %}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table><div class="pager"><a href="/?users_page=1&admins_page={{admins_page}}">First</a><a href="/?users_page={{users_page+1 if users_page < users_pages else users_pages}}&admins_page={{admins_page}}">Next</a><span>{{users_page}} / {{users_pages}}</span></div></div>
+<div class="card"><h4>Users</h4><div class='hint'>Total: {{total_users}} | Active: {{active_users}} | Disabled: {{disabled_users}}</div><input id='userSearch' placeholder='Search users or comments...' oninput='filterUsers()'><table id='usersTable'><tr><th>Username</th><th>Status</th><th>Traffic</th><th>Expiry</th><th>Last online</th></tr>{% for u in users %}<tr><td><span class="user-link" onclick='openUserModal({{u.id}}, {{u.username|tojson}}, {{u.subscription_link|tojson}}, {{u.config_link|tojson}}, {{(u.last_online_text or "-")|tojson}}, {{(u.creator_name or "-")|tojson}})'>{{u.username}}</span><div class="small">{{u.admin_comment or ''}}</div></td><td>{% set st = u.status_state if u.status_state is defined else ('active' if u.enabled else 'disabled') %}{% if not admin.is_super %}<form method='post' action='/users/toggle'><input type='hidden' name='user_id' value='{{u.id}}'><input type='hidden' name='enabled' value='{{ "false" if u.enabled else "true" }}'><button class='status-btn {% if st=="active" %}green{% elif st=="limited" %}yellow{% else %}red{% endif %}'>{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</button></form>{% else %}<span class="badge {% if st=='active' %}green{% elif st=='limited' %}yellow{% else %}red{% endif %}">{{'limited' if st=='limited' else ('active' if u.enabled else 'disabled')}}</span>{% endif %}</td><td>{{'{:,.0f}'.format(u.traffic_gb)}}GB</td><td>{{u.expiry_days}}d</td><td>{{u.last_online_text or "-"}}</td></tr>{% endfor %}</table><div class="pager"><a href="/?users_page=1&admins_page={{admins_page}}">First</a><a href="/?users_page={{users_page+1 if users_page < users_pages else users_pages}}&admins_page={{admins_page}}">Next</a><span>{{users_page}} / {{users_pages}}</span></div></div>
 
   {% if admin.is_super %}
-  <div class="card"><h4>Admins</h4>{% for x in admins %}<details class="admin-item"><summary><strong>{{x.username}}</strong></summary><form method="post" action="/admins/update" style="padding-top:10px">
+  <div class="card"><h4>Admins</h4><input id="adminSearch" placeholder="Search admins..." oninput="filterAdmins()">{% for x in admins %}<details class="admin-item"><summary><strong>{{x.username}}</strong></summary><form method="post" action="/admins/update" style="padding-top:10px">
     <input type="hidden" name="admin_id" value="{{x.id}}"><strong>{{x.username}}</strong>
     <div class="row3"><div><input name="price" type="number" step="1" value="{{x.price_per_gb|int}}" required><div class="small">Price per GB (Toman): {{'{:,.0f}'.format(x.price_per_gb)}}</div></div><div><input name="credit" type="number" step="1" value="{{x.credit_toman|int}}" required><div class="small">Admin balance (Toman): {{'{:,.0f}'.format(x.credit_toman)}}</div></div><select name="active"><option value="true" {% if x.active %}selected{% endif %}>Active</option><option value="false" {% if not x.active %}selected{% endif %}>Disabled</option></select></div>
     <input name="new_password" type="password" placeholder="Set new password (optional)">
@@ -112,6 +119,7 @@ function closeModal(id){document.getElementById(id).classList.remove('show')}
 function openLogs(){document.getElementById('logsModal').classList.add('show')}
 async function copyText(v){await navigator.clipboard.writeText(v);}
 function filterUsers(){const q=document.getElementById("userSearch").value.toLowerCase();document.querySelectorAll("#usersTable tr").forEach((r,i)=>{if(i===0)return;r.style.display=r.innerText.toLowerCase().includes(q)?"":"none";});}
+function filterAdmins(){const q=document.getElementById("adminSearch").value.toLowerCase();document.querySelectorAll(".admin-item").forEach((item)=>{item.style.display=item.innerText.toLowerCase().includes(q)?"":"none";});}
 async function refreshLogs(e){e.preventDefault();const r=await fetch(location.pathname);const t=await r.text();const d=new DOMParser().parseFromString(t,"text/html");document.querySelector("#logsTable").innerHTML=d.querySelector("#logsTable").innerHTML;}
 function updateCost(){const gb=parseFloat(document.getElementById('trafficGb')?.value||0);const price={{admin.price_per_gb|int}};document.getElementById('costPreview').innerText=(gb*price).toLocaleString();}
 function confirmCreateUser(){return confirm('Are you sure you want to create this user? Balance will be deducted.');}

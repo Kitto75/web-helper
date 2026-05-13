@@ -96,6 +96,29 @@ class XUIClient:
                     last_seen[(inbound_id, email)] = value
         return last_seen
 
+    def build_client_usage_map(self):
+        usage = {}
+        for inbound in self.list_inbounds() or []:
+            inbound_id = inbound.get("id")
+            for st in inbound.get("clientStats") or []:
+                email = st.get("email")
+                if inbound_id is None or not email:
+                    continue
+                total = st.get("total")
+                up = st.get("up", 0)
+                down = st.get("down", 0)
+                try:
+                    total_i = int(total) if total is not None else 0
+                    used_i = int(up or 0) + int(down or 0)
+                except Exception:
+                    continue
+                usage[(inbound_id, email)] = {
+                    "total": total_i,
+                    "used": used_i,
+                    "is_limited": total_i > 0 and used_i >= total_i,
+                }
+        return usage
+
     def set_client_enabled(self, inbound_id: int, email: str, enabled: bool):
         inbound = self.get_inbound(inbound_id) or {}
         settings_raw = inbound.get("settings")
@@ -130,7 +153,11 @@ class XUIClient:
     def apply_subscription_port(self, subscription_url: str):
         try:
             settings = self.get_panel_settings() or {}
-            sub_port = settings.get('subPort')
+            sub_port = (
+                settings.get('subPort')
+                or settings.get('subscribePort')
+                or settings.get('subscriptionPort')
+            )
             sub_path = settings.get('subURIPath') or settings.get('subPath') or '/sub/'
             if sub_port is None:
                 return subscription_url

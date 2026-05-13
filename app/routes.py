@@ -109,9 +109,14 @@ def home(request: Request, dbs=Depends(db), msg: str = '', users_page: int = 1, 
                 inbounds.append({"id": ib.get("id"), "name": ib.get("remark") or ib.get("tag") or f"Inbound {ib.get('id')}"})
             tehran_now = datetime.utcnow() + timedelta(hours=3, minutes=30)
             online_map = client.build_last_online_map()
+            usage_map = client.build_client_usage_map()
             for u in users:
                 last_online = online_map.get((u.inbound_id, u.username))
                 u.last_online_text = "-"
+                u.status_state = "active" if u.enabled else "disabled"
+                usage = usage_map.get((u.inbound_id, u.username)) or {}
+                if usage.get("is_limited"):
+                    u.status_state = "limited"
                 if isinstance(last_online, int) and last_online > 0:
                     dt = datetime.utcfromtimestamp(last_online / 1000) + timedelta(hours=3, minutes=30)
                     u.last_online_text = dt.strftime('%Y-%m-%d %H:%M:%S') + " (Tehran)"
@@ -295,11 +300,22 @@ def restart_services(request: Request, dbs=Depends(db)):
         return RedirectResponse('/', 303)
     panel_service = os.getenv("PANEL_SERVICE_NAME", "x-ui")
     app_service = os.getenv("APP_SERVICE_NAME", "web-helper")
+
+    def _service_candidates(primary_name: str):
+        names = [primary_name]
+        if not primary_name.endswith(".service"):
+            names.append(f"{primary_name}.service")
+        if primary_name == "x-ui":
+            names.extend(["3x-ui", "3x-ui.service"])
+        return list(dict.fromkeys(names))
+
     def _try_restart(service_name: str):
-        attempts = [
-            ["systemctl", "restart", service_name],
-            ["service", service_name, "restart"],
-        ]
+        attempts = []
+        for candidate in _service_candidates(service_name):
+            attempts.extend([
+                ["systemctl", "restart", candidate],
+                ["service", candidate, "restart"],
+            ])
         last_error = "unknown"
         for cmd in attempts:
             try:
