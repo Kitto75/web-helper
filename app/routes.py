@@ -3,6 +3,7 @@ import io
 import json
 import os
 import subprocess
+from urllib.parse import quote_plus
 from datetime import datetime, timedelta
 
 import qrcode
@@ -339,11 +340,19 @@ def toggle_user(request:Request, user_id:int=Form(...), enabled:str=Form(...), d
             client=XUIClient(cfg['url'],cfg['username'],cfg['password'],cfg.get('path',''))
             result=client.set_client_enabled(u.inbound_id,u.username,next_enabled)
             if not client.is_success(result):
-                log(dbs,a.username,'user',f'toggle_failed {u.username} enabled={next_enabled} reason={result}')
-                return RedirectResponse('/?msg=Failed+to+sync+status+with+3x-ui',303)
+                reason = str(result)
+                log(dbs, a.username, 'user', f'toggle_sync_failed username={u.username} user_id={u.id} inbound_id={u.inbound_id} target_enabled={next_enabled} reason={reason}')
+                msg = quote_plus(
+                    f"3x-ui rejected status change for {u.username}. Status was NOT changed locally. Details: {reason}"
+                )
+                return RedirectResponse(f'/?msg={msg}', 303)
         except Exception as e:
-            log(dbs,a.username,'user',f'toggle_failed {u.username} enabled={next_enabled} error={str(e)}')
-            return RedirectResponse('/?msg=Failed+to+sync+status+with+3x-ui',303)
+            err = str(e)
+            log(dbs, a.username, 'user', f'toggle_sync_error username={u.username} user_id={u.id} inbound_id={u.inbound_id} target_enabled={next_enabled} error={err}')
+            msg = quote_plus(
+                f"Failed to reach 3x-ui for {u.username}. Status was NOT changed locally. Error: {err}"
+            )
+            return RedirectResponse(f'/?msg={msg}', 303)
     u.enabled=next_enabled
     log(dbs,a.username,'user',f'toggle {u.username} enabled={u.enabled}')
     dbs.commit()
