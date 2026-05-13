@@ -103,17 +103,17 @@ class XUIClient:
             return {"success": False, "msg": "inbound settings not found"}
         settings = json.loads(settings_raw) if isinstance(settings_raw, str) else (settings_raw or {})
         clients = settings.get("clients") or []
-        found = False
+        target_client = None
         client_id = None
         for c in clients:
             if c.get("email") == email:
                 c["enable"] = bool(enabled)
                 client_id = c.get("id")
-                found = True
+                target_client = c
                 break
-        if not found:
+        if not target_client:
             return {"success": False, "msg": "client not found"}
-        payload = {"clients": clients}
+        payload = {"clients": [target_client]}
         if client_id:
             try:
                 return self.call("POST", f"/inbounds/updateClient/{client_id}", data={"id": inbound_id, "settings": json.dumps(payload)})
