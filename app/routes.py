@@ -74,7 +74,7 @@ def detect_msg_type(msg: str) -> str:
 
 
 @router.get('/', response_class=HTMLResponse)
-def home(request: Request, dbs=Depends(db), msg: str = ''):
+def home(request: Request, dbs=Depends(db), msg: str = '', users_page: int = 1, admins_page: int = 1):
     admin = current_admin(request, dbs)
     if not admin:
         return RedirectResponse('/login')
@@ -91,6 +91,8 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
     reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == False)).all() if admin.is_super else []
 
     admin_name_by_id = {x.id: x.username for x in dbs.scalars(select(Admin)).all()} if admin.is_super else {}
+    for u in users:
+        u.creator_name = admin_name_by_id.get(u.admin_id, f"#{u.admin_id}") if admin.is_super else admin.username
     for r in reqs:
         r.admin_name = admin_name_by_id.get(r.admin_id, f"#{r.admin_id}")
     approved_reqs = dbs.scalars(select(BalanceRequest).where(BalanceRequest.approved == True)).all() if admin.is_super else dbs.scalars(select(BalanceRequest).where(BalanceRequest.admin_id == admin.id, BalanceRequest.approved == True)).all()
@@ -117,7 +119,19 @@ def home(request: Request, dbs=Depends(db), msg: str = ''):
             inbounds = []
     allowed = parse_allowed_inbounds(admin.allowed_inbounds)
     usable_inbounds = [i for i in inbounds if (admin.is_super or not allowed or i["id"] in allowed)]
-    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users, 'logs': logs, 'admins': admins, 'reqs': reqs, 'approved_reqs': approved_reqs, 'msg': msg, 'msg_type': detect_msg_type(msg), 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed, 'total_users': total_users, 'active_users': active_users, 'disabled_users': disabled_users})
+    page_size = 10
+    users_page = max(users_page, 1)
+    admins_page = max(admins_page, 1)
+    users_pages = max((len(users) + page_size - 1) // page_size, 1)
+    admins_pages = max((len(admins) + page_size - 1) // page_size, 1)
+    users_page = min(users_page, users_pages)
+    admins_page = min(admins_page, admins_pages)
+    users_paginated = users[(users_page - 1) * page_size: users_page * page_size]
+    admins_paginated = admins[(admins_page - 1) * page_size: admins_page * page_size]
+    admin_name_by_id = {x.id: x.username for x in dbs.scalars(select(Admin)).all()}
+    for r in approved_reqs:
+        r.admin_name = admin_name_by_id.get(r.admin_id, f"#{r.admin_id}")
+    return templates.TemplateResponse('index.html', {'request': request, 'admin': admin, 'users': users_paginated, 'logs': logs, 'admins': admins_paginated, 'reqs': reqs, 'approved_reqs': approved_reqs, 'msg': msg, 'msg_type': detect_msg_type(msg), 'panel_cfg': panel_cfg, 'inbounds': inbounds, 'usable_inbounds': usable_inbounds, 'allowed_ids': allowed, 'total_users': total_users, 'active_users': active_users, 'disabled_users': disabled_users, 'users_page': users_page, 'users_pages': users_pages, 'admins_page': admins_page, 'admins_pages': admins_pages})
 
 
 @router.get('/login', response_class=HTMLResponse)
@@ -171,6 +185,8 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
     if not valid_username(username):
         log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=invalid_username')
         return RedirectResponse('/?msg=Username+must+be+lowercase+and+numeric', 303)
+    if len((admin_comment or '').strip()) > 300:
+        return RedirectResponse('/?msg=Comment+is+too+long+(max+300+chars)', 303)
     expiry_days = min(expiry_days or 30, 30)
     if traffic_gb <= 0:
         log(dbs, a.username, 'user_create', f'validation_failed username={username} reason=invalid_traffic traffic_gb={traffic_gb}')
@@ -280,7 +296,7 @@ def restart_services(request: Request, dbs=Depends(db)):
     app_service = os.getenv("APP_SERVICE_NAME", "web-helper")
     try:
         subprocess.run(["systemctl", "restart", panel_service], check=True)
-        subprocess.run(["systemctl", "restart", app_service], check=True)
+        subprocess.run(["systemctl", "restart", app_service], check=False)
         log(dbs, a.username, "system", f"restart_success panel={panel_service} app={app_service}")
         return RedirectResponse('/?msg=Restart+command+sent+successfully', 303)
     except Exception as e:

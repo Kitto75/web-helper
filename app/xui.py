@@ -83,14 +83,21 @@ class XUIClient:
         settings = json.loads(settings_raw) if isinstance(settings_raw, str) else (settings_raw or {})
         clients = settings.get("clients") or []
         found = False
+        client_id = None
         for c in clients:
             if c.get("email") == email:
                 c["enable"] = bool(enabled)
+                client_id = c.get("id")
                 found = True
                 break
         if not found:
             return {"success": False, "msg": "client not found"}
         payload = {"clients": clients}
+        if client_id:
+            try:
+                return self.call("POST", f"/inbounds/updateClient/{client_id}", data={"id": inbound_id, "settings": json.dumps(payload)})
+            except Exception:
+                pass
         return self.call("POST", "/inbounds/updateClient", data={"id": inbound_id, "settings": json.dumps(payload)})
 
 
@@ -103,6 +110,7 @@ class XUIClient:
         try:
             settings = self.get_panel_settings() or {}
             sub_port = settings.get('subPort')
+            sub_path = settings.get('subURIPath') or settings.get('subPath') or '/sub/'
             if sub_port is None:
                 return subscription_url
             parts = urlsplit(subscription_url)
@@ -113,7 +121,11 @@ class XUIClient:
                 if parts.password:
                     auth += f":{parts.password}"
                 netloc = f"{auth}@{netloc}"
-            return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+            path = parts.path
+            if "/sub/" in path and sub_path:
+                token = path.split("/sub/", 1)[1]
+                path = f"{sub_path.rstrip('/')}/{token}"
+            return urlunsplit((parts.scheme, netloc, path, parts.query, parts.fragment))
         except Exception:
             return subscription_url
 
