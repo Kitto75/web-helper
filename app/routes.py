@@ -162,7 +162,7 @@ def panel_config(request: Request, panel_url: str = Form(...), panel_path: str =
 
 
 @router.post('/users/create')
-def create_user(request: Request, username: str = Form(...), inbound_id: int = Form(...), traffic_gb: float = Form(...), expiry_days: int = Form(30), dbs=Depends(db)):
+def create_user(request: Request, username: str = Form(...), inbound_id: int = Form(...), traffic_gb: float = Form(...), expiry_days: int = Form(30), admin_comment: str = Form(''), dbs=Depends(db)):
     global ADMIN_LOCK
     a = current_admin(request, dbs)
     if not a or not a.active or ADMIN_LOCK:
@@ -207,7 +207,7 @@ def create_user(request: Request, username: str = Form(...), inbound_id: int = F
     links = client.get_client_links(inbound_id=inbound_id, email=username, panel_base=panel_base)
     sub = links.get("subscription") or f"{panel_base}/sub/{username}"
     user_cfg = links.get("config") or f'{panel_base}/panel/inbounds'
-    dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg))
+    dbs.add(UserAccount(admin_id=a.id, username=username, inbound_id=inbound_id, traffic_gb=traffic_gb, expiry_days=expiry_days, subscription_link=sub, config_link=user_cfg, admin_comment=admin_comment.strip()))
     log(dbs, a.username, 'user', f'created {username} {traffic_gb}GB {expiry_days}d inbound_id={inbound_id}')
     dbs.commit()
     return RedirectResponse('/?msg=User+created+successfully', 303)
@@ -301,4 +301,18 @@ def reject(request:Request, req_id:int=Form(...), dbs=Depends(db)):
         dbs.delete(r)
         log(dbs,a.username,'balance',f'reject request_id={req_id}')
         dbs.commit()
+    return RedirectResponse('/',303)
+
+
+@router.post('/users/toggle')
+def toggle_user(request:Request, user_id:int=Form(...), enabled:str=Form(...), dbs=Depends(db)):
+    a=current_admin(request,dbs)
+    if not a or a.is_super:
+        return RedirectResponse('/',303)
+    u=dbs.get(UserAccount,user_id)
+    if not u or u.admin_id!=a.id:
+        return RedirectResponse('/',303)
+    u.enabled=(enabled=="true")
+    log(dbs,a.username,'user',f'toggle {u.username} enabled={u.enabled}')
+    dbs.commit()
     return RedirectResponse('/',303)

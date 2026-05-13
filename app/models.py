@@ -26,6 +26,7 @@ class UserAccount(Base):
     subscription_link: Mapped[str]=mapped_column(Text)
     config_link: Mapped[str]=mapped_column(Text)
     created_at: Mapped[datetime]=mapped_column(DateTime, default=datetime.utcnow)
+    admin_comment: Mapped[str]=mapped_column(Text, default='')
 
 class BalanceRequest(Base):
     __tablename__='balance_requests'

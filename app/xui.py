@@ -1,5 +1,6 @@
 import httpx, uuid, json
-from urllib.parse import quote
+
+from urllib.parse import quote, urlsplit, urlunsplit
 
 class XUIClient:
     def __init__(self, base_url:str, username:str, password:str, web_base_path:str=''):
@@ -60,6 +61,29 @@ class XUIClient:
         return None
 
 
+
+    def get_panel_settings(self):
+        data = self.call('GET', '/setting/all')
+        return data.get('obj') if isinstance(data, dict) else {}
+
+    def apply_subscription_port(self, subscription_url: str):
+        try:
+            settings = self.get_panel_settings() or {}
+            sub_port = settings.get('subPort')
+            if sub_port is None:
+                return subscription_url
+            parts = urlsplit(subscription_url)
+            host = parts.hostname or ''
+            netloc = f"{host}:{int(sub_port)}"
+            if parts.username:
+                auth = parts.username
+                if parts.password:
+                    auth += f":{parts.password}"
+                netloc = f"{auth}@{netloc}"
+            return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        except Exception:
+            return subscription_url
+
     def get_client_links(self, inbound_id:int, email:str, panel_base:str):
         inbound = self.get_inbound(inbound_id) or {}
         settings_raw = inbound.get("settings")
@@ -75,6 +99,7 @@ class XUIClient:
         client = next((c for c in clients if c.get("email") == email), None)
         sub_id = (client or {}).get("subId")
         subscription = f"{panel_base}/sub/{sub_id}" if sub_id else f"{panel_base}/sub/{email}"
+        subscription = self.apply_subscription_port(subscription)
 
         config = ""
         if client:
