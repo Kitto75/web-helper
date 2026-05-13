@@ -57,6 +57,15 @@
   <h2>{{admin.username}} {% if admin.is_super %}<span class="badge">Super Admin</span>{% endif %} <span class="badge">Balance: {{'{:,.0f}'.format(admin.credit_toman)}}</span></h2>
   <div class="actions" style="min-width:260px">
     <button type="button" id="themeBtn" class="btn-muted theme-btn" onclick="toggleTheme(this)">🪄 Theme Shift</button>
+    <div class="gear-wrap">
+      <button type="button" class="btn-muted" onclick="toggleLinkSettings(event)">⚙️ Link Port</button>
+      <div id="linkSettingsMenu" class="gear-menu">
+        <label class="small" for="subPortInput">Subscription port</label>
+        <input id="subPortInput" type="number" min="1" max="65535" placeholder="8443" oninput="onPortInputChange()">
+        <label class="checkitem" style="margin-top:8px"><input id="emptyPortCheck" type="checkbox" onchange="onEmptyPortToggle()"><span>Empty (remove :port)</span></label>
+        <div class="small" style="margin-top:6px">Applies to shown subscription links and QR codes.</div>
+      </div>
+    </div>
     {% if admin.is_super %}
     <div class="gear-wrap">
       <button type="button" class="btn-muted" onclick="toggleGearMenu()">⚙️</button>
@@ -125,7 +134,57 @@ function updateCost(){const gb=parseFloat(document.getElementById('trafficGb')?.
 function confirmCreateUser(){return confirm('Are you sure you want to create this user? Balance will be deducted.');}
 function toggleTheme(btn){const rect=btn.getBoundingClientRect();const x=rect.left+rect.width/2;const y=rect.top+rect.height/2;const ripple=document.createElement('div');ripple.style.cssText=`position:fixed;left:${x}px;top:${y}px;width:20px;height:20px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%) scale(0);z-index:9999;pointer-events:none;`;document.body.appendChild(ripple);ripple.animate([{transform:'translate(-50%,-50%) scale(0)'},{transform:'translate(-50%,-50%) scale(120)',opacity:.15}],{duration:550,easing:'ease-out'});setTimeout(()=>ripple.remove(),600);document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");}
 function renderQR(elId,text){const el=document.getElementById(elId);el.innerHTML='';if(!text)return;new QRCode(el,{text,width:220,height:220,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});el.onclick=()=>copyText(text);}
-function openUserModal(id, username, sub, cfg, lastSeen, creator){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('qrCreator').innerText='Created by: '+creator;document.getElementById('subLink').innerText=sub;document.getElementById('cfgLink').innerText=cfg;renderQR('subQR',sub);renderQR('cfgQR',cfg);document.getElementById('userModal').classList.add('show');}
+function openUserModal(id, username, sub, cfg, lastSeen, creator){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('qrCreator').innerText='Created by: '+creator;lastOriginalSub=sub;const shownSub=rewriteUrlPort(sub);document.getElementById('subLink').innerText=shownSub;document.getElementById('cfgLink').innerText=cfg;renderQR('subQR',shownSub);renderQR('cfgQR',cfg);document.getElementById('userModal').classList.add('show');}
+
+const portSettings={value:null,empty:false};
+let lastOriginalSub='';
+function parseStoredPortSettings(){
+  try{
+    const raw=localStorage.getItem('subscriptionPortSettings');
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    if(data&&Number.isInteger(data.value)&&data.value>=1&&data.value<=65535)portSettings.value=data.value;
+    portSettings.empty=Boolean(data&&data.empty);
+  }catch(_){}
+}
+function storePortSettings(){localStorage.setItem('subscriptionPortSettings',JSON.stringify(portSettings));}
+function toggleLinkSettings(e){e?.stopPropagation();document.getElementById('linkSettingsMenu').classList.toggle('show');}
+document.addEventListener('click',(e)=>{const m=document.getElementById('linkSettingsMenu');if(!m)return;if(!m.parentElement.contains(e.target))m.classList.remove('show');});
+function rewriteUrlPort(raw){
+  if(!raw)return raw;
+  try{
+    const u=new URL(raw);
+    if(portSettings.empty)u.port='';
+    else if(portSettings.value)u.port=String(portSettings.value);
+    return u.toString();
+  }catch(_){return raw;}
+}
+function applyCurrentPortSettingToModal(){
+  if(!lastOriginalSub)return;
+  const nextSub=rewriteUrlPort(lastOriginalSub);
+  document.getElementById('subLink').innerText=nextSub;
+  renderQR('subQR',nextSub);
+}
+function onPortInputChange(){
+  const input=document.getElementById('subPortInput');
+  const val=parseInt(input.value,10);
+  if(Number.isInteger(val)&&val>=1&&val<=65535){portSettings.value=val;portSettings.empty=false;document.getElementById('emptyPortCheck').checked=false;}
+  else if(input.value===''){portSettings.value=null;}
+  storePortSettings();
+  applyCurrentPortSettingToModal();
+}
+function onEmptyPortToggle(){
+  const checked=document.getElementById('emptyPortCheck').checked;
+  portSettings.empty=checked;
+  if(checked){document.getElementById('subPortInput').value='';portSettings.value=null;}
+  storePortSettings();
+  applyCurrentPortSettingToModal();
+}
+parseStoredPortSettings();
+window.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('emptyPortCheck').checked=portSettings.empty;
+  if(portSettings.value)document.getElementById('subPortInput').value=portSettings.value;
+});
 function setupNumberFormatting(){document.querySelectorAll('input[type=\"number\"]').forEach(el=>{el.addEventListener('input',()=>{const n=el.value.replace(/,/g,'');if(!n||n==='-'||n.includes('.'))return;el.setAttribute('data-formatted',Number(n).toLocaleString());});});}
 setupNumberFormatting();
 </script>
