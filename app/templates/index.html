@@ -61,12 +61,14 @@
     <div class="gear-wrap">
       <button type="button" class="btn-muted" onclick="toggleGearMenu()">⚙️</button>
       <div id="gearMenu" class="gear-menu">
-        <form method="post" action="/system/restart"><button class="btn-danger">Restart Panel + Service</button></form>
-        <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
         <label class="small" for="subPortInput">Subscription port</label>
         <input id="subPortInput" type="number" min="1" max="65535" placeholder="8443">
         <label class="checkitem" style="margin-top:8px"><input id="emptyPortCheck" type="checkbox" onchange="onEmptyPortToggle()"><span>Empty (remove :port)</span></label>
+        <label class="small" style="margin-top:8px" for="subPathInput">Subscription path</label>
+        <input id="subPathInput" type="text" placeholder="/sub">
+        <div class="small">Path before user token in subscription link.</div>
         <button type="button" style="margin-top:8px" onclick="applyPortSettings()">Apply</button>
+        <div class="small" id="portApplyReaction" style="margin-top:6px;display:none">✅ Applied.</div>
         <div class="small" style="margin-top:6px">Applies to shown subscription links and QR codes.</div>
       </div>
     </div>
@@ -135,7 +137,7 @@
 </div>
 
 {% if admin.is_super %}<button class="fab btn-muted" onclick="openLogs()">📜 Logs</button>{% endif %}
-<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div id='lastOnline' class='hint'></div><div id='qrCreator' class='hint'></div><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><div id="subQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><div id="cfgQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
+<div class="overlay" id="userModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('userModal')">Close</button><h3 id="modalUser"></h3><div id='lastOnline' class='hint'></div><div id='qrCreator' class='hint'></div><div class="qr-grid"><div class="qr-box"><h4>Subscription</h4><div class="small" id="subTitleUser"></div><div id="subQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="subLink"></div></div><div class="qr-box"><h4>Inbound Config</h4><div class="small" id="cfgTitleUser"></div><div id="cfgQR"></div><div class="small">Click QR to copy link</div><div class="mono small" id="cfgLink"></div></div></div></div></div>
 <div class="overlay" id="logsModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('logsModal')">Close</button><h3>Logs</h3><button style="max-width:180px" onclick='refreshLogs(event)'>Refresh logs</button><table id='logsTable'><tr><th>Time</th><th>Category</th>{% if admin.is_super %}<th>Actor</th>{% endif %}<th>Details</th></tr>{% for l in logs %}<tr><td>{{l.created_at.strftime('%Y-%m-%d %H:%M:%S')}}</td><td>{{l.category}}</td>{% if admin.is_super %}<td>{{l.actor}}</td>{% endif %}<td class="mono">{{l.detail_short}}</td></tr>{% endfor %}</table></div></div>
 
 <div class="overlay" id="balanceHistoryModal"><div class="modal"><button class="btn-muted close" onclick="closeModal('balanceHistoryModal')">Close</button><h3>Balance Requests History</h3><table><tr><th>ID</th><th>Admin</th><th>Amount</th><th>Status</th><th>Message</th></tr>{% for r in approved_reqs %}<tr><td>{{r.id}}</td><td>{{r.admin_name}}</td><td>{{'{:,.0f}'.format(r.amount)}}</td><td>Approved</td><td>{{r.message}}</td></tr>{% endfor %}</table></div></div>
@@ -153,9 +155,9 @@ function updateCost(){const gb=parseFloat(document.getElementById('trafficGb')?.
 function confirmCreateUser(){return confirm('Are you sure you want to create this user? Balance will be deducted.');}
 function toggleTheme(btn){const rect=btn.getBoundingClientRect();const x=rect.left+rect.width/2;const y=rect.top+rect.height/2;const ripple=document.createElement('div');ripple.style.cssText=`position:fixed;left:${x}px;top:${y}px;width:20px;height:20px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%) scale(0);z-index:9999;pointer-events:none;`;document.body.appendChild(ripple);ripple.animate([{transform:'translate(-50%,-50%) scale(0)'},{transform:'translate(-50%,-50%) scale(120)',opacity:.15}],{duration:550,easing:'ease-out'});setTimeout(()=>ripple.remove(),600);document.body.classList.toggle("dark");localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");}
 function renderQR(elId,text){const el=document.getElementById(elId);el.innerHTML='';if(!text)return;new QRCode(el,{text,width:220,height:220,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});el.onclick=()=>copyText(text);}
-function openUserModal(id, username, sub, cfg, lastSeen, creator){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('qrCreator').innerText='Created by: '+creator;lastOriginalSub=sub;const shownSub=rewriteUrlPort(sub);document.getElementById('subLink').innerText=shownSub;document.getElementById('cfgLink').innerText=cfg;renderQR('subQR',shownSub);renderQR('cfgQR',cfg);document.getElementById('userModal').classList.add('show');}
+function openUserModal(id, username, sub, cfg, lastSeen, creator){document.getElementById('modalUser').innerText='User: '+username;document.getElementById('lastOnline').innerText='Last online: '+lastSeen;document.getElementById('qrCreator').innerText='Created by: '+creator;document.getElementById('subTitleUser').innerText='User: '+username;document.getElementById('cfgTitleUser').innerText='User: '+username;lastOriginalSub=sub;const shownSub=rewriteUrlPort(sub);document.getElementById('subLink').innerText=shownSub;document.getElementById('cfgLink').innerText=cfg;renderQR('subQR',shownSub);renderQR('cfgQR',cfg);document.getElementById('userModal').classList.add('show');}
 
-const portSettings={value:null,empty:false};
+const portSettings={value:null,empty:false,path:'/sub'};
 let lastOriginalSub='';
 function parseStoredPortSettings(){
   try{
@@ -164,9 +166,15 @@ function parseStoredPortSettings(){
     const data=JSON.parse(raw);
     if(data&&Number.isInteger(data.value)&&data.value>=1&&data.value<=65535)portSettings.value=data.value;
     portSettings.empty=Boolean(data&&data.empty);
+    if(data&&typeof data.path==='string'){portSettings.path=normalizeSubPath(data.path);}
   }catch(_){}
 }
 function storePortSettings(){localStorage.setItem('subscriptionPortSettings',JSON.stringify(portSettings));}
+function normalizeSubPath(pathRaw){
+  const clean=(pathRaw||'').trim();
+  if(!clean)return '/sub';
+  return clean.startsWith('/')?clean:'/'+clean;
+}
 
 function rewriteUrlPort(raw){
   if(!raw)return raw;
@@ -174,8 +182,16 @@ function rewriteUrlPort(raw){
     const u=new URL(raw);
     if(portSettings.empty)u.port='';
     else if(portSettings.value)u.port=String(portSettings.value);
+    u.pathname=rewritePathnameWithUser(u.pathname);
     return u.toString();
   }catch(_){return raw;}
+}
+function rewritePathnameWithUser(pathname){
+  const path=normalizeSubPath(portSettings.path);
+  const parts=(pathname||'').split('/').filter(Boolean);
+  if(parts.length===0)return path;
+  const userSegment=parts[parts.length-1];
+  return path+'/'+userSegment;
 }
 function applyCurrentPortSettingToModal(){
   if(!lastOriginalSub)return;
@@ -185,11 +201,14 @@ function applyCurrentPortSettingToModal(){
 }
 function applyPortSettings(){
   const input=document.getElementById('subPortInput');
+  const pathInput=document.getElementById('subPathInput');
   const val=parseInt(input.value,10);
   if(Number.isInteger(val)&&val>=1&&val<=65535){portSettings.value=val;portSettings.empty=false;document.getElementById('emptyPortCheck').checked=false;}
   else if(input.value===''){portSettings.value=null;}
+  portSettings.path=normalizeSubPath(pathInput.value);
   storePortSettings();
   applyCurrentPortSettingToModal();
+  showApplyReaction();
 }
 function onPortInputChange(){
   const input=document.getElementById('subPortInput');
@@ -206,10 +225,16 @@ function onEmptyPortToggle(){
   storePortSettings();
   applyCurrentPortSettingToModal();
 }
+function showApplyReaction(){
+  const el=document.getElementById('portApplyReaction');
+  el.style.display='block';
+  setTimeout(()=>{el.style.display='none';},1500);
+}
 parseStoredPortSettings();
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('emptyPortCheck').checked=portSettings.empty;
   if(portSettings.value)document.getElementById('subPortInput').value=portSettings.value;
+  document.getElementById('subPathInput').value=portSettings.path;
 });
 function setupNumberFormatting(){document.querySelectorAll('input[type=\"number\"]').forEach(el=>{el.addEventListener('input',()=>{const n=el.value.replace(/,/g,'');if(!n||n==='-'||n.includes('.'))return;el.setAttribute('data-formatted',Number(n).toLocaleString());});});}
 setupNumberFormatting();

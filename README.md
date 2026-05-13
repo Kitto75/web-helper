@@ -23,6 +23,17 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 38291
 ```
 
+## Run Helper Script (with optional SSL)
+```bash
+python run_web_helper.py
+```
+
+If your entered **3x-ui panel URL** starts with `https://...`, the script asks for:
+- `fullchain.pem` path
+- `privkey.pem` path
+
+and starts uvicorn with SSL options.
+
 ## Recommended Setup
 After starting the server:
 ```bash
@@ -57,6 +68,9 @@ curl -X POST -F 'username=superadmin' -F 'password=StrongPass123!' http://127.0.
 # initial interactive setup for panel + 3x-ui
 python setup_panel.py
 
+# interactive run helper (asks SSL cert paths if panel URL starts with https://)
+python run_web_helper.py
+
 # inspect CLI options
 python xui_cli.py --help
 
@@ -64,6 +78,48 @@ python xui_cli.py --help
 systemctl status web-helper
 systemctl restart web-helper
 journalctl -u web-helper -n 200 --no-pager
+```
+
+## Systemd Setup (full service)
+
+### 1) Create service file
+Create `/etc/systemd/system/web-helper.service`:
+
+```ini
+[Unit]
+Description=web-helper FastAPI service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/web-helper
+Environment=\"PATH=/opt/web-helper/.venv/bin\"
+ExecStart=/opt/web-helper/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 38291
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> Replace `User`, `Group`, and paths to match your server.
+
+### 2) Enable and start
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable web-helper
+sudo systemctl start web-helper
+```
+
+### 3) Useful service commands
+```bash
+sudo systemctl status web-helper
+sudo systemctl restart web-helper
+sudo systemctl stop web-helper
+sudo journalctl -u web-helper -f
+sudo journalctl -u web-helper -n 200 --no-pager
 ```
 
 ## Notes
